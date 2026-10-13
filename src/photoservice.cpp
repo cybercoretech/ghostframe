@@ -23,14 +23,22 @@ PhotoService::PhotoService(QObject *parent) : QAbstractListModel(parent) {
         setStatus("Saved PhotoPrism address found; install GNOME Keyring/libsecret to restore its password automatically.");
         return;
     }
-    QProcess lookup;
-    lookup.start(secretTool, {"lookup", "service", "ghostframe", "server", savedUrl});
-    if (!lookup.waitForStarted(1500) || !lookup.waitForFinished(3000) || lookup.exitCode() != 0) {
-        setStatus("Saved PhotoPrism address found; unlock the desktop keyring to reconnect automatically.");
-        return;
-    }
-    const QString savedToken = QString::fromUtf8(lookup.readAllStandardOutput()).trimmed();
-    if (!savedToken.isEmpty()) connectToServer(savedUrl, savedToken);
+    auto *lookup = new QProcess(this);
+    connect(lookup, &QProcess::finished, this, [this, lookup, savedUrl](int exitCode, QProcess::ExitStatus exitStatus) {
+        const QString savedToken = QString::fromUtf8(lookup->readAllStandardOutput()).trimmed();
+        lookup->deleteLater();
+        if (exitStatus == QProcess::NormalExit && exitCode == 0 && !savedToken.isEmpty()) {
+            connectToServer(savedUrl, savedToken);
+            return;
+        }
+        setStatus("Saved PhotoPrism address found; unlock the desktop keyring or enter the app password to reconnect.");
+    });
+    connect(lookup, &QProcess::errorOccurred, this, [this, lookup](QProcess::ProcessError error) {
+        if (error != QProcess::FailedToStart) return;
+        lookup->deleteLater();
+        setStatus("Could not access the desktop keyring. Enter the app password to reconnect.");
+    });
+    lookup->start(secretTool, {"lookup", "service", "ghostframe", "server", savedUrl});
 }
 
 int PhotoService::rowCount(const QModelIndex &parent) const {
