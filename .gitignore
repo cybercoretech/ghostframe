@@ -1,0 +1,13 @@
+/Makefile
+/.qmake.stash
+/ghostframe
+/*.o
+/moc_predefs.h
+/qml_Main_qml.cpp
+/qmlcache_loader.cpp
+/qrc_*.cpp
+/qml_qmlcache.qrc
+/.cache/
+*.user
+*.swp
+deploy/.env
