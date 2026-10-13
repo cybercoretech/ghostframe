@@ -17,6 +17,9 @@ The current client foundation includes:
 - 🧭 Keyboard shortcuts: `Ctrl+K` focuses search, `Enter` runs it, `Ctrl+R` refreshes the current query, and `Esc` closes the viewer.
 - 🗝️ A session-only token field. Credentials are not written to disk by Ghostframe.
 - 🖼️ Capability-token thumbnails served directly by PhotoPrism, without sending account credentials in image URLs.
+- 🎛️ Built-in image editor with 90° rotation, drag-to-crop, light, contrast, and saturation controls. Previews are rendered quickly while exports use the original full-resolution image.
+- 🧬 Cybermeta sidecars: each export gets an XMP file containing title, caption, tags, source identity, and the edit recipe. The image and metadata stay portable outside Ghostframe.
+- 📤 Safe exports to `~/Pictures/Ghostframe/Exports/`; the source image stays untouched.
 - 🐧 Native Linux packaging groundwork for Omarchy/Arch.
 
 ## 🧱 Architecture
@@ -49,6 +52,7 @@ This initial design is **self-hosted, not end-to-end encrypted**. PhotoPrism nee
 - `qmake6`, a C++20 compiler, and `make` to build from source.
 - A reachable PhotoPrism server. The default local address is `http://127.0.0.1:2342`.
 - A PhotoPrism API access token with photo read access.
+- ImageMagick 7 (`imagemagick`) for editor previews and full-resolution exports.
 
 ## 🚀 Build and run
 
@@ -61,6 +65,10 @@ make -j"$(nproc)"
 ```
 
 On first launch, enter your PhotoPrism URL and an API access token. Ghostframe keeps the token in memory for the current session; reconnect after restarting the app.
+
+### Edit and export a photo
+
+Open a photo from the library and choose **EDIT IMAGE**. Ghostframe downloads a temporary full-resolution working copy from PhotoPrism, then lets you rotate, crop by dragging on the preview, adjust light, contrast, and saturation, and enter title, caption, and comma-separated tags. **SAVE EXPORT + CYBERMETA** writes a new image and matching `.xmp` sidecar into `~/Pictures/Ghostframe/Exports/`. Ghostframe never writes edits into the original. The XMP sidecar includes the PhotoPrism source hash and folder plus the applied edit values, so the export can be understood and catalogued by other photo tools.
 
 ### Create a read-only PhotoPrism app password
 

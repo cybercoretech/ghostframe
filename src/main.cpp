@@ -1,4 +1,5 @@
 #include "photoservice.h"
+#include "imageeditor.h"
 
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
@@ -14,11 +15,13 @@ int main(int argc, char *argv[]) {
     QQuickStyle::setStyle("Basic");
 
     PhotoService photos;
+    ImageEditor imageEditor;
     QQmlApplicationEngine engine;
     QObject::connect(&engine, &QQmlEngine::warnings, &app, [](const QList<QQmlError> &warnings) {
         for (const auto &warning : warnings) qCritical().noquote() << warning.toString();
     });
     engine.rootContext()->setContextProperty("photoService", &photos);
+    engine.rootContext()->setContextProperty("imageEditor", &imageEditor);
     const QUrl mainUrl(QStringLiteral("qrc:/qml/Main.qml"));
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreated, &app,
                      [mainUrl](QObject *object, const QUrl &url) {

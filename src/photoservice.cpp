@@ -3,7 +3,11 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QFile>
+#include <QFileInfo>
 #include <QNetworkReply>
+#include <QRegularExpression>
+#include <QUuid>
 #include <QUrlQuery>
 
 PhotoService::PhotoService(QObject *parent) : QAbstractListModel(parent) {}
@@ -21,13 +25,16 @@ QVariant PhotoService::data(const QModelIndex &index, int role) const {
     case ThumbnailRole: return photo.thumbnail;
     case FullRole: return photo.full;
     case HashRole: return photo.hash;
+    case PathRole: return photo.folder;
+    case OriginalNameRole: return photo.originalName;
     default: return {};
     }
 }
 
 QHash<int, QByteArray> PhotoService::roleNames() const {
     return {{TitleRole, "title"}, {SubtitleRole, "subtitle"},
-            {ThumbnailRole, "thumbnail"}, {FullRole, "fullImage"}, {HashRole, "hash"}};
+            {ThumbnailRole, "thumbnail"}, {FullRole, "fullImage"}, {HashRole, "hash"},
+            {PathRole, "folder"}, {OriginalNameRole, "originalName"}};
 }
 
 QString PhotoService::stringField(const QJsonObject &obj, const QStringList &names) {
@@ -75,6 +82,7 @@ void PhotoService::connectToServer(const QString &url, const QString &token) {
         const auto error = reply->error();
         const auto statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         const auto previewTokenHeader = reply->rawHeader("X-Preview-Token");
+        const auto downloadTokenHeader = reply->rawHeader("X-Download-Token");
         reply->deleteLater();
         if (error != QNetworkReply::NoError || statusCode >= 400) {
             setStatus(statusCode == 401 || statusCode == 403
@@ -86,6 +94,7 @@ void PhotoService::connectToServer(const QString &url, const QString &token) {
         const auto obj = doc.object();
         m_previewToken = stringField(obj, {"previewToken", "PreviewToken", "preview_token"});
         if (m_previewToken.isEmpty()) m_previewToken = QString::fromUtf8(previewTokenHeader);
+        m_downloadToken = QString::fromUtf8(downloadTokenHeader);
         if (!m_connected) { m_connected = true; emit connectedChanged(); }
         m_offset = 0;
         m_hasMore = true;
@@ -124,6 +133,52 @@ void PhotoService::browseFolder(const QString &path) {
 
 void PhotoService::refreshFolders() {
     if (m_connected) fetchFolders();
+}
+
+void PhotoService::downloadOriginal(const QString &hash, const QString &title, const QString &folder, const QString &originalName) {
+    if (!m_connected || hash.isEmpty()) {
+        emit originalDownloadFailed("Connect to PhotoPrism and select an indexed photo first.");
+        return;
+    }
+    if (m_downloadToken.isEmpty()) {
+        emit originalDownloadFailed("PhotoPrism did not provide a full-resolution download token. Reconnect and try again.");
+        return;
+    }
+    QUrl url = apiUrl("/api/v1/dl/" + hash);
+    QUrlQuery query;
+    query.addQueryItem("t", m_downloadToken);
+    url.setQuery(query);
+    auto *reply = m_network.get(request(url));
+    const QString suffix = QFileInfo(originalName).suffix().replace(QRegularExpression("[^A-Za-z0-9]"), "");
+    const QString path = m_downloadDir.filePath(QUuid::createUuid().toString(QUuid::WithoutBraces) + (suffix.isEmpty() ? QString() : "." + suffix));
+    auto *file = new QFile(path, reply);
+    if (!file->open(QIODevice::WriteOnly)) {
+        reply->abort();
+        file->deleteLater();
+        reply->deleteLater();
+        emit originalDownloadFailed("Could not create a temporary full-resolution working copy.");
+        return;
+    }
+    connect(reply, &QNetworkReply::readyRead, this, [reply, file] {
+        if (file->write(reply->readAll()) < 0) reply->abort();
+    });
+    connect(reply, &QNetworkReply::finished, this, [this, reply, file, path, title, hash, folder, originalName] {
+        const auto tail = reply->readAll();
+        bool writeOk = tail.isEmpty() || file->write(tail) >= 0;
+        const auto error = reply->error();
+        const int code = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        file->close();
+        file->deleteLater();
+        reply->deleteLater();
+        if (!writeOk || error != QNetworkReply::NoError || code >= 400 || QFileInfo(path).size() == 0) {
+            QFile::remove(path);
+            emit originalDownloadFailed(code == 401 || code == 403
+                ? "PhotoPrism denied original download. Ensure this account has photo read and download access."
+                : "Could not download the full-resolution original from PhotoPrism.");
+            return;
+        }
+        emit originalDownloaded(title, hash, folder, path, originalName);
+    });
 }
 
 void PhotoService::fetchFolders() {
@@ -190,6 +245,7 @@ void PhotoService::fetchPhotos(bool append) {
         const auto error = reply->error();
         const auto statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         const auto previewTokenHeader = reply->rawHeader("X-Preview-Token");
+        const auto downloadTokenHeader = reply->rawHeader("X-Download-Token");
         reply->deleteLater();
         m_loading = false;
         if (m_pendingRefresh) {
@@ -206,6 +262,7 @@ void PhotoService::fetchPhotos(bool append) {
         const auto doc = QJsonDocument::fromJson(bytes);
         if (!doc.isArray()) { setStatus("PhotoPrism returned an unexpected response."); return; }
         if (!previewTokenHeader.isEmpty()) m_previewToken = QString::fromUtf8(previewTokenHeader);
+        if (!downloadTokenHeader.isEmpty()) m_downloadToken = QString::fromUtf8(downloadTokenHeader);
         const auto array = doc.array();
         QVector<Photo> found;
         found.reserve(array.size());
@@ -218,6 +275,8 @@ void PhotoService::fetchPhotos(bool append) {
             photo.title = stringField(obj, {"Title", "title", "Name", "name"});
             if (photo.title.isEmpty()) photo.title = "Untitled image";
             photo.subtitle = stringField(obj, {"TakenAtLocal", "TakenAt", "takenAt", "Year"});
+            photo.folder = stringField(obj, {"Path", "path"});
+            photo.originalName = stringField(obj, {"FileName", "fileName", "Name", "name"});
             const QString token = m_previewToken.isEmpty() ? "public" : m_previewToken;
             const QString base = m_serverUrl + "/api/v1/t/" + hash + "/" + token + "/";
             photo.thumbnail = QUrl(base + "fit_720");
@@ -244,6 +303,7 @@ void PhotoService::disconnectFromServer() {
     m_serverUrl.clear();
     m_token.clear();
     m_previewToken.clear();
+    m_downloadToken.clear();
     m_selectedFolder.clear();
     m_folders.clear();
     m_offset = 0;

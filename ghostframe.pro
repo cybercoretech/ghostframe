@@ -5,9 +5,11 @@ TEMPLATE = app
 TARGET = ghostframe
 
 SOURCES += src/main.cpp \
-           src/photoservice.cpp
+           src/photoservice.cpp \
+           src/imageeditor.cpp
 
-HEADERS += src/photoservice.h
+HEADERS += src/photoservice.h \
+           src/imageeditor.h
 
 RESOURCES += qml.qrc
 

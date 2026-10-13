@@ -2,6 +2,7 @@
 
 #include <QAbstractListModel>
 #include <QNetworkAccessManager>
+#include <QTemporaryDir>
 #include <QVariantList>
 #include <QUrl>
 
@@ -14,7 +15,7 @@ class PhotoService final : public QAbstractListModel {
     Q_PROPERTY(QVariantList folders READ folders NOTIFY foldersChanged)
     Q_PROPERTY(QString selectedFolder READ selectedFolder NOTIFY selectedFolderChanged)
 public:
-    enum Roles { TitleRole = Qt::UserRole + 1, SubtitleRole, ThumbnailRole, FullRole, HashRole };
+    enum Roles { TitleRole = Qt::UserRole + 1, SubtitleRole, ThumbnailRole, FullRole, HashRole, PathRole, OriginalNameRole };
     explicit PhotoService(QObject *parent = nullptr);
     int rowCount(const QModelIndex &parent = {}) const override;
     QVariant data(const QModelIndex &index, int role) const override;
@@ -29,6 +30,7 @@ public:
     Q_INVOKABLE void search(const QString &query);
     Q_INVOKABLE void browseFolder(const QString &path);
     Q_INVOKABLE void refreshFolders();
+    Q_INVOKABLE void downloadOriginal(const QString &hash, const QString &title, const QString &folder, const QString &originalName);
     Q_INVOKABLE void loadMore();
     Q_INVOKABLE void disconnectFromServer();
 
@@ -39,10 +41,12 @@ signals:
     void photoCountChanged();
     void foldersChanged();
     void selectedFolderChanged();
+    void originalDownloaded(const QString &title, const QString &hash, const QString &folder, const QString &filePath, const QString &originalName);
+    void originalDownloadFailed(const QString &message);
 
 private:
     struct Photo {
-        QString title, subtitle, hash;
+        QString title, subtitle, hash, folder, originalName;
         QUrl thumbnail, full;
     };
     void setStatus(const QString &value);
@@ -56,7 +60,8 @@ private:
     QVector<Photo> m_photos;
     QVariantList m_folders;
     QString m_status = QStringLiteral("Enter your PhotoPrism server details to connect.");
-    QString m_serverUrl, m_token, m_previewToken, m_query, m_selectedFolder;
+    QString m_serverUrl, m_token, m_previewToken, m_downloadToken, m_query, m_selectedFolder;
+    QTemporaryDir m_downloadDir;
     int m_offset = 0;
     bool m_connected = false, m_loading = false, m_pendingRefresh = false, m_hasMore = true;
 };

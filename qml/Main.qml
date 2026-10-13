@@ -31,9 +31,10 @@ ApplicationWindow {
     property var selectedPhoto: null
     property bool showSettings: !photoService.connected
     property string savedUrl: "http://127.0.0.1:2342"
+    property string saveNotice: ""
 
     Shortcut { sequence: "Ctrl+K"; onActivated: searchField.forceActiveFocus() }
-    Shortcut { sequence: "Escape"; onActivated: { selectedPhoto = null; showSettings = false } }
+    Shortcut { sequence: "Escape"; onActivated: { if (showEditor) { imageEditor.cancel(); showEditor = false } else { selectedPhoto = null; showSettings = false } } }
     Shortcut { sequence: "Ctrl+R"; onActivated: photoService.search(searchField.text) }
     Shortcut {
         sequence: "Q"
@@ -42,6 +43,19 @@ ApplicationWindow {
         onActivated: Qt.quit()
     }
     Connections { target: photoService; function onConnectedChanged() { if (photoService.connected) root.showSettings = false } }
+    Connections {
+        target: photoService
+        function onOriginalDownloaded(title, hash, folder, filePath, originalName) {
+            root.showEditor = true
+            imageEditor.openOriginal(filePath, title, hash, folder, originalName)
+        }
+        function onOriginalDownloadFailed(message) { root.saveNotice = message; noticeTimer.restart() }
+    }
+    Connections {
+        target: imageEditor
+        function onSaved(path) { root.saveNotice = "Export saved: " + path; noticeTimer.restart() }
+    }
+    Timer { id: noticeTimer; interval: 7000; onTriggered: root.saveNotice = "" }
 
     ColumnLayout {
         anchors.fill: parent
@@ -169,6 +183,9 @@ ApplicationWindow {
                         required property string subtitle
                         required property url thumbnail
                         required property url fullImage
+                        required property string hash
+                        required property string folder
+                        required property string originalName
                         width: grid.cellWidth - 12; height: grid.cellHeight - 12
                         Rectangle {
                             anchors.fill: parent
@@ -195,7 +212,7 @@ ApplicationWindow {
                                     Text { width: parent.width; text: subtitle; color: palette.cyan; font.family: "JetBrains Mono"; font.pixelSize: 9; elide: Text.ElideRight }
                                 }
                             }
-                            MouseArea { id: mouse; anchors.fill: parent; hoverEnabled: true; onClicked: root.selectedPhoto = ({title: title, subtitle: subtitle, source: fullImage}) }
+                            MouseArea { id: mouse; anchors.fill: parent; hoverEnabled: true; onClicked: root.selectedPhoto = ({title: title, subtitle: subtitle, source: fullImage, hash: hash, folder: folder, originalName: originalName}) }
                         }
                     }
                     onAtYEndChanged: if (atYEnd) photoService.loadMore()
@@ -225,11 +242,106 @@ ApplicationWindow {
                 Rectangle {
                     anchors.fill: parent; color: "#e6080a0d"; visible: root.selectedPhoto !== null; z: 3
                     Image { anchors.fill: parent; anchors.margins: 54; source: root.selectedPhoto ? root.selectedPhoto.source : ""; fillMode: Image.PreserveAspectFit; asynchronous: true }
+                    Button {
+                        anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 20
+                        text: imageEditor.busy ? "PREPARING…" : "✎  EDIT IMAGE"
+                        enabled: !imageEditor.busy
+                        onClicked: photoService.downloadOriginal(root.selectedPhoto.hash, root.selectedPhoto.title, root.selectedPhoto.folder, root.selectedPhoto.originalName)
+                        contentItem: Text { text: parent.text; color: palette.darkText; font.family: "JetBrains Mono"; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                        background: Rectangle { color: parent.hovered ? Qt.lighter(palette.cyan, 1.1) : palette.cyan; border.color: palette.darkText; radius: 2 }
+                    }
                     Rectangle { anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 20; width: 42; height: 42; color: palette.panel; border.color: palette.pink
                         Text { anchors.centerIn: parent; text: "×"; color: palette.text; font.pixelSize: 25 }
                         MouseArea { anchors.fill: parent; onClicked: root.selectedPhoto = null }
                     }
                     Text { anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 24; text: root.selectedPhoto ? root.selectedPhoto.title + "   //   " + root.selectedPhoto.subtitle : ""; color: palette.text; font.family: "JetBrains Mono"; font.pixelSize: 12 }
+                }
+                Rectangle {
+                    anchors.fill: parent; visible: root.showEditor; z: 5; color: "#f0080a0d"
+                    Rectangle {
+                        anchors.fill: parent; anchors.margins: 24; color: palette.panel; border.color: palette.cyan; border.width: 1; radius: 3
+                        ColumnLayout {
+                            anchors.fill: parent; anchors.margins: 18; spacing: 12
+                            RowLayout {
+                                Layout.fillWidth: true
+                                ColumnLayout { Layout.fillWidth: true; spacing: 3
+                                    Text { text: "GHOSTFRAME // IMAGE LAB"; color: palette.cyan; font.family: "JetBrains Mono"; font.pixelSize: 16; font.bold: true; font.letterSpacing: 1.2 }
+                                    Text { text: imageEditor.sourceTitle + "  ·  Full-resolution nondestructive export"; color: palette.muted; font.family: "Inter"; font.pixelSize: 11; elide: Text.ElideRight }
+                                }
+                                Button { text: "×"; onClicked: { imageEditor.cancel(); root.showEditor = false }
+                                    contentItem: Text { text: "×"; color: palette.darkText; font.pixelSize: 23; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                    background: Rectangle { color: palette.pink; border.color: palette.darkText; radius: 2 }
+                                }
+                            }
+                            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: palette.line }
+                            RowLayout {
+                                Layout.fillWidth: true; Layout.fillHeight: true; spacing: 16
+                                Rectangle {
+                                    Layout.fillWidth: true; Layout.fillHeight: true; color: "#07090c"; border.color: palette.line; radius: 2; clip: true
+                                    Image {
+                                        id: editPreview
+                                        anchors.centerIn: parent
+                                        width: imageEditor.displayWidth > 0 && imageEditor.displayHeight > 0 ? Math.min(parent.width, parent.height * imageEditor.displayWidth / imageEditor.displayHeight) : parent.width
+                                        height: imageEditor.displayWidth > 0 && imageEditor.displayHeight > 0 ? Math.min(parent.height, parent.width * imageEditor.displayHeight / imageEditor.displayWidth) : parent.height
+                                        source: imageEditor.previewUrl; fillMode: Image.PreserveAspectFit; asynchronous: true; cache: false
+                                    }
+                                    Rectangle {
+                                        visible: imageEditor.hasCrop; x: editPreview.x + imageEditor.cropX * editPreview.width; y: editPreview.y + imageEditor.cropY * editPreview.height
+                                        width: imageEditor.cropWidth * editPreview.width; height: imageEditor.cropHeight * editPreview.height
+                                        color: "#1835f4ff"; border.color: palette.cyan; border.width: 2
+                                    }
+                                    MouseArea {
+                                        anchors.fill: editPreview; enabled: editPreview.status === Image.Ready
+                                        property point startPoint
+                                        onPressed: startPoint = Qt.point(mouse.x, mouse.y)
+                                        onReleased: {
+                                            const left = Math.min(startPoint.x, mouse.x) / width
+                                            const top = Math.min(startPoint.y, mouse.y) / height
+                                            const cropWidth = Math.abs(mouse.x - startPoint.x) / width
+                                            const cropHeight = Math.abs(mouse.y - startPoint.y) / height
+                                            if (cropWidth > 0.015 && cropHeight > 0.015) imageEditor.setCrop(left, top, cropWidth, cropHeight)
+                                        }
+                                    }
+                                    Text { anchors.centerIn: parent; visible: !imageEditor.ready && !imageEditor.busy; text: imageEditor.status; color: palette.muted; font.family: "JetBrains Mono"; font.pixelSize: 11; wrapMode: Text.Wrap; width: parent.width - 40; horizontalAlignment: Text.AlignHCenter }
+                                }
+                                ScrollView {
+                                    Layout.preferredWidth: 330; Layout.fillHeight: true; clip: true
+                                    ColumnLayout {
+                                        width: 310; spacing: 10
+                                        Text { text: "TRANSFORM"; color: palette.lime; font.family: "JetBrains Mono"; font.pixelSize: 10; font.bold: true; font.letterSpacing: 1 }
+                                        RowLayout { Layout.fillWidth: true
+                                            Button { text: "↶  ROTATE LEFT"; Layout.fillWidth: true; onClicked: imageEditor.rotateBy(-90); contentItem: Text { text: parent.text; color: palette.darkText; font.family: "JetBrains Mono"; font.pixelSize: 9; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } background: Rectangle { color: palette.cyan; radius: 2 } }
+                                            Button { text: "ROTATE RIGHT  ↷"; Layout.fillWidth: true; onClicked: imageEditor.rotateBy(90); contentItem: Text { text: parent.text; color: palette.darkText; font.family: "JetBrains Mono"; font.pixelSize: 9; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } background: Rectangle { color: palette.cyan; radius: 2 } }
+                                        }
+                                        RowLayout { Layout.fillWidth: true
+                                            Button { text: "CLEAR CROP"; Layout.fillWidth: true; onClicked: imageEditor.clearCrop(); contentItem: Text { text: parent.text; color: palette.text; font.family: "JetBrains Mono"; font.pixelSize: 9; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } background: Rectangle { color: palette.panel2; border.color: palette.line; radius: 2 } }
+                                            Button { text: "RESET ALL"; Layout.fillWidth: true; onClicked: imageEditor.resetEdits(); contentItem: Text { text: parent.text; color: palette.text; font.family: "JetBrains Mono"; font.pixelSize: 9; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter } background: Rectangle { color: palette.panel2; border.color: palette.line; radius: 2 } }
+                                        }
+                                        Text { text: "Drag over the preview to crop"; color: palette.muted; font.family: "Inter"; font.pixelSize: 10 }
+                                        Text { text: "LIGHT  " + Math.round(imageEditor.brightness); color: palette.text; font.family: "JetBrains Mono"; font.pixelSize: 10 }
+                                        Slider { id: lightSlider; Layout.fillWidth: true; from: -50; to: 50; value: imageEditor.brightness; onMoved: imageEditor.setAdjustments(value, contrastSlider.value, saturationSlider.value) }
+                                        Text { text: "CONTRAST  " + Math.round(imageEditor.contrast); color: palette.text; font.family: "JetBrains Mono"; font.pixelSize: 10 }
+                                        Slider { id: contrastSlider; Layout.fillWidth: true; from: -50; to: 50; value: imageEditor.contrast; onMoved: imageEditor.setAdjustments(lightSlider.value, value, saturationSlider.value) }
+                                        Text { text: "SATURATION  " + Math.round(imageEditor.saturation) + "%"; color: palette.text; font.family: "JetBrains Mono"; font.pixelSize: 10 }
+                                        Slider { id: saturationSlider; Layout.fillWidth: true; from: 0; to: 200; value: imageEditor.saturation; onMoved: imageEditor.setAdjustments(lightSlider.value, contrastSlider.value, value) }
+                                        Text { text: "CYBERMETA"; color: palette.pink; font.family: "JetBrains Mono"; font.pixelSize: 10; font.bold: true; font.letterSpacing: 1; Layout.topMargin: 5 }
+                                        TextField { id: metaTitle; Layout.fillWidth: true; text: imageEditor.sourceTitle; placeholderText: "Title"; color: palette.text; font.family: "Inter"; background: Rectangle { color: palette.bg; border.color: palette.line } }
+                                        TextField { id: metaCaption; Layout.fillWidth: true; placeholderText: "Caption / description"; color: palette.text; font.family: "Inter"; background: Rectangle { color: palette.bg; border.color: palette.line } }
+                                        TextField { id: metaTags; Layout.fillWidth: true; placeholderText: "Tags, separated by commas"; color: palette.text; font.family: "Inter"; background: Rectangle { color: palette.bg; border.color: palette.line } }
+                                        Text { text: "Writes an XMP sidecar with source hash, folder, edit recipe, title, caption and tags."; color: palette.muted; font.family: "Inter"; font.pixelSize: 9; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                                        Button {
+                                            Layout.fillWidth: true; Layout.preferredHeight: 42; text: imageEditor.busy ? "WORKING…" : "SAVE EXPORT + CYBERMETA"
+                                            enabled: imageEditor.ready && !imageEditor.busy
+                                            onClicked: imageEditor.save(metaTitle.text, metaCaption.text, metaTags.text)
+                                            contentItem: Text { text: parent.text; color: palette.darkText; font.family: "JetBrains Mono"; font.pixelSize: 10; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                            background: Rectangle { color: parent.enabled ? (parent.hovered ? Qt.lighter(palette.lime, 1.1) : palette.lime) : palette.line; radius: 2 }
+                                        }
+                                        Text { text: imageEditor.status; color: palette.cyan; font.family: "Inter"; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -238,7 +350,7 @@ ApplicationWindow {
             Layout.fillWidth: true; Layout.preferredHeight: 30; color: palette.panel
             Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: palette.line }
             RowLayout { anchors.fill: parent; anchors.leftMargin: 18; anchors.rightMargin: 18
-                Text { text: "◆  " + photoService.status; color: palette.muted; font.family: "JetBrains Mono"; font.pixelSize: 9; Layout.fillWidth: true; elide: Text.ElideRight }
+                Text { text: "◆  " + (root.saveNotice || photoService.status); color: root.saveNotice ? palette.cyan : palette.muted; font.family: "JetBrains Mono"; font.pixelSize: 9; Layout.fillWidth: true; elide: Text.ElideRight }
                 Text { text: "GHOSTFRAME  /  v0.1.0"; color: palette.lime; font.family: "JetBrains Mono"; font.pixelSize: 9; font.letterSpacing: 1 }
             }
         }
