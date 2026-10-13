@@ -170,7 +170,7 @@ ApplicationWindow {
             Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: palette.line }
             RowLayout { anchors.fill: parent; anchors.leftMargin: 18; anchors.rightMargin: 18
                 Text { text: "◆  " + photoService.status; color: palette.muted; font.family: "JetBrains Mono"; font.pixelSize: 9; Layout.fillWidth: true; elide: Text.ElideRight }
-                Text { text: "GHOSTFRAME  /  v0.1.0"; color: palette.lime; font.family: "JetBrains Mono"; font.pixelSize: 9; letterSpacing: 1 }
+                Text { text: "GHOSTFRAME  /  v0.1.0"; color: palette.lime; font.family: "JetBrains Mono"; font.pixelSize: 9; font.letterSpacing: 1 }
             }
         }
     }
@@ -178,7 +178,7 @@ ApplicationWindow {
     component HeaderButton: Button {
         property color accent: palette.cyan
         property bool active: false
-        contentItem: Text { text: parent.text; color: parent.active ? palette.bg : palette.text; font.family: "JetBrains Mono"; font.pixelSize: 10; font.bold: true; letterSpacing: 0.4; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+        contentItem: Text { text: parent.text; color: parent.active ? palette.bg : palette.text; font.family: "JetBrains Mono"; font.pixelSize: 10; font.bold: true; font.letterSpacing: 0.4; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
         background: Rectangle { color: parent.active ? parent.accent : palette.bg; border.color: parent.accent; border.width: 1; radius: 1 }
     }
     component SideItem: Item {
