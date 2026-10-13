@@ -75,9 +75,9 @@ ApplicationWindow {
                     background: Rectangle { color: palette.panel; border.color: searchField.activeFocus ? palette.cyan : palette.cyan; border.width: 1; radius: 2 }
                     onAccepted: photoService.search(text)
                 }
-                HeaderButton { label: "▦  LIBRARY"; accent: palette.pink; active: !showSettings; onClicked: { showSettings = false; selectedPhoto = null } }
-                HeaderButton { label: "⌘  SOURCE"; accent: palette.cyan; active: false; onClicked: Qt.openUrlExternally("https://github.com/cybercore-tech/ghostframe") }
-                HeaderButton { label: "⚙  SETTINGS"; accent: palette.lime; active: showSettings; onClicked: showSettings = !showSettings }
+                HeaderButton { text: "▦  LIBRARY"; accent: palette.pink; active: !showSettings; onClicked: { showSettings = false; selectedPhoto = null } }
+                HeaderButton { text: "⌘  SOURCE"; accent: palette.cyan; active: false; onClicked: Qt.openUrlExternally("https://github.com/cybercore-tech/ghostframe") }
+                HeaderButton { text: "⚙  SETTINGS"; accent: palette.lime; active: showSettings; onClicked: showSettings = !showSettings }
             }
         }
 
