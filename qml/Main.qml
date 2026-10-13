@@ -27,6 +27,7 @@ ApplicationWindow {
         readonly property color lime: "#b4f33a"
     }
 
+    property var themeColors: palette
     property var selectedPhoto: null
     property bool showSettings: !photoService.connected
     property string savedUrl: "http://127.0.0.1:2342"
@@ -34,6 +35,12 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+K"; onActivated: searchField.forceActiveFocus() }
     Shortcut { sequence: "Escape"; onActivated: { selectedPhoto = null; showSettings = false } }
     Shortcut { sequence: "Ctrl+R"; onActivated: photoService.search(searchField.text) }
+    Shortcut {
+        sequence: "Q"
+        context: Qt.WindowShortcut
+        enabled: !searchField.activeFocus && !serverField.activeFocus && !tokenField.activeFocus
+        onActivated: Qt.quit()
+    }
     Connections { target: photoService; function onConnectedChanged() { if (photoService.connected) root.showSettings = false } }
 
     ColumnLayout {
@@ -77,9 +84,19 @@ ApplicationWindow {
                     background: Rectangle { color: palette.panel; border.color: searchField.activeFocus ? palette.cyan : palette.cyan; border.width: 1; radius: 2 }
                     onAccepted: photoService.search(text)
                 }
-                HeaderButton { text: "▦  LIBRARY"; accent: palette.pink; selected: !showSettings && photoService.selectedFolder === ""; onClicked: { showSettings = false; photoService.search(""); selectedPhoto = null } }
-                HeaderButton { text: "⌘  SOURCE"; accent: palette.cyan; selected: false; onClicked: Qt.openUrlExternally("https://github.com/cybercore-tech/ghostframe") }
-                HeaderButton { text: "⚙  SETTINGS"; accent: palette.lime; selected: showSettings; onClicked: showSettings = !showSettings }
+                HeaderButton { text: "▦  LIBRARY"; themeColors: root.themeColors; accent: palette.pink; selected: !showSettings && photoService.selectedFolder === ""; onClicked: { showSettings = false; photoService.search(""); selectedPhoto = null } }
+                HeaderButton { text: "⌘  SOURCE"; themeColors: root.themeColors; accent: palette.cyan; selected: false; onClicked: Qt.openUrlExternally("https://github.com/cybercore-tech/ghostframe") }
+                HeaderButton { text: "⚙  SETTINGS"; themeColors: root.themeColors; accent: palette.lime; selected: showSettings; onClicked: showSettings = !showSettings }
+                Button {
+                    id: closeButton
+                    text: "×"
+                    Accessible.name: "Close Ghostframe"
+                    Layout.preferredWidth: 42
+                    Layout.preferredHeight: 42
+                    onClicked: Qt.quit()
+                    contentItem: Text { text: closeButton.text; color: palette.darkText; font.family: "Inter"; font.pixelSize: 25; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    background: Rectangle { color: closeButton.hovered ? Qt.lighter(palette.pink, 1.14) : palette.pink; border.color: palette.darkText; border.width: 1; radius: 1 }
+                }
             }
         }
 
@@ -91,9 +108,9 @@ ApplicationWindow {
                 ColumnLayout {
                     anchors.fill: parent; anchors.margins: 18; spacing: 15
                     Text { text: "◈  COLLECTIONS"; color: palette.text; font.family: "JetBrains Mono"; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1 }
-                    SideItem { icon: "▦"; label: "All Images"; selected: !showSettings && photoService.selectedFolder === ""; accent: palette.cyan; onClicked: { showSettings = false; photoService.search(""); selectedPhoto = null } }
-                    SideItem { icon: "◷"; label: "Recently Added"; selected: false; accent: palette.pink; onClicked: { showSettings = false; photoService.search("order:newest") } }
-                    SideItem { icon: "☆"; label: "Favorites"; selected: false; accent: palette.lime; onClicked: { showSettings = false; photoService.search("favorite:true") } }
+                    SideItem { themeColors: root.themeColors; icon: "▦"; label: "All Images"; selected: !showSettings && photoService.selectedFolder === ""; accent: palette.cyan; onClicked: { showSettings = false; photoService.search(""); selectedPhoto = null } }
+                    SideItem { themeColors: root.themeColors; icon: "◷"; label: "Recently Added"; selected: false; accent: palette.pink; onClicked: { showSettings = false; photoService.search("order:newest") } }
+                    SideItem { themeColors: root.themeColors; icon: "☆"; label: "Favorites"; selected: false; accent: palette.lime; onClicked: { showSettings = false; photoService.search("favorite:true") } }
                     Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: palette.line; Layout.topMargin: 2; Layout.bottomMargin: 1 }
                     RowLayout {
                         Layout.fillWidth: true
@@ -125,12 +142,13 @@ ApplicationWindow {
                         ScrollBar.vertical: ScrollBar { active: true }
                         delegate: Item {
                             required property var modelData
+                            property var themeColors: root.themeColors
                             width: folderList.width
                             height: 28
-                            property color folderAccent: modelData.depth % 3 === 0 ? palette.cyan : (modelData.depth % 3 === 1 ? palette.pink : palette.lime)
-                            Rectangle { anchors.fill: parent; color: photoService.selectedFolder === modelData.path ? palette.panel2 : (folderHover.containsMouse ? palette.panelHover : "transparent"); border.color: photoService.selectedFolder === modelData.path ? folderAccent : (folderHover.containsMouse ? palette.line : "transparent"); border.width: 1; radius: 2 }
+                            property color folderAccent: modelData.depth % 3 === 0 ? themeColors.cyan : (modelData.depth % 3 === 1 ? themeColors.pink : themeColors.lime)
+                            Rectangle { anchors.fill: parent; color: photoService.selectedFolder === modelData.path ? themeColors.panel2 : (folderHover.containsMouse ? themeColors.panelHover : "transparent"); border.color: photoService.selectedFolder === modelData.path ? folderAccent : (folderHover.containsMouse ? themeColors.line : "transparent"); border.width: 1; radius: 2 }
                             Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: 2; color: folderAccent; visible: photoService.selectedFolder === modelData.path || folderHover.containsMouse }
-                            Text { anchors.fill: parent; anchors.leftMargin: 10 + modelData.depth * 10; anchors.rightMargin: 8; verticalAlignment: Text.AlignVCenter; text: "›  " + modelData.title; color: photoService.selectedFolder === modelData.path ? folderAccent : (folderHover.containsMouse ? palette.text : palette.muted); font.family: "Inter"; font.pixelSize: 11; elide: Text.ElideMiddle }
+                            Text { anchors.fill: parent; anchors.leftMargin: 10 + modelData.depth * 10; anchors.rightMargin: 8; verticalAlignment: Text.AlignVCenter; text: "›  " + modelData.title; color: photoService.selectedFolder === modelData.path ? folderAccent : (folderHover.containsMouse ? themeColors.text : themeColors.muted); font.family: "Inter"; font.pixelSize: 11; elide: Text.ElideMiddle }
                             MouseArea { id: folderHover; anchors.fill: parent; hoverEnabled: true; onClicked: { showSettings = false; selectedPhoto = null; photoService.browseFolder(modelData.path) } }
                         }
                     }
@@ -153,16 +171,29 @@ ApplicationWindow {
                         required property url fullImage
                         width: grid.cellWidth - 12; height: grid.cellHeight - 12
                         Rectangle {
-                            anchors.fill: parent; color: palette.panel; border.color: mouse.containsMouse ? palette.cyan : palette.line; border.width: mouse.containsMouse ? 1 : 1; radius: 2
-                            Image { id: thumb; anchors.fill: parent; anchors.margins: 1; source: thumbnail; fillMode: Image.PreserveAspectCrop; asynchronous: true; cache: true
-                                Rectangle { anchors.fill: parent; color: palette.panel2; visible: thumb.status !== Image.Ready
-                                    Text { anchors.centerIn: parent; text: thumb.status === Image.Error ? "IMAGE UNAVAILABLE" : "◌  LOADING"; color: palette.muted; font.family: "JetBrains Mono"; font.pixelSize: 9 }
+                            anchors.fill: parent
+                            color: palette.panel
+                            border.color: mouse.containsMouse ? palette.cyan : "#5b6875"
+                            border.width: mouse.containsMouse ? 2 : 1
+                            radius: 3
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.margins: 5
+                                color: palette.bg
+                                border.color: palette.line
+                                border.width: 1
+                                radius: 2
+                                Image { id: thumb; anchors.fill: parent; anchors.margins: 1; source: thumbnail; fillMode: Image.PreserveAspectCrop; asynchronous: true; cache: true
+                                    Rectangle { anchors.fill: parent; color: palette.panel2; visible: thumb.status !== Image.Ready
+                                        Text { anchors.centerIn: parent; text: thumb.status === Image.Error ? "IMAGE UNAVAILABLE" : "◌  LOADING"; color: palette.muted; font.family: "JetBrains Mono"; font.pixelSize: 9 }
+                                    }
                                 }
-                            }
-                            Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 44; color: "#e6080a0d" }
-                            Column { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 9; spacing: 3
-                                Text { width: parent.width; text: title; color: palette.text; font.family: "Inter"; font.pixelSize: 11; elide: Text.ElideRight }
-                                Text { width: parent.width; text: subtitle; color: palette.cyan; font.family: "JetBrains Mono"; font.pixelSize: 9; elide: Text.ElideRight }
+                                Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 48; color: "#f20a0e13"; border.color: palette.line; border.width: 1 }
+                                Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; width: mouse.containsMouse ? 4 : 2; height: 48; color: mouse.containsMouse ? palette.pink : palette.cyan }
+                                Column { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 9; spacing: 3
+                                    Text { width: parent.width; text: title; color: palette.text; font.family: "Inter"; font.pixelSize: 11; elide: Text.ElideRight }
+                                    Text { width: parent.width; text: subtitle; color: palette.cyan; font.family: "JetBrains Mono"; font.pixelSize: 9; elide: Text.ElideRight }
+                                }
                             }
                             MouseArea { id: mouse; anchors.fill: parent; hoverEnabled: true; onClicked: root.selectedPhoto = ({title: title, subtitle: subtitle, source: fullImage}) }
                         }
@@ -215,22 +246,24 @@ ApplicationWindow {
 
     component HeaderButton: Button {
         id: headerButton
-        property color accent: palette.cyan
+        property var themeColors
+        property color accent: "#35f4ff"
         property bool selected: false
-        contentItem: Text { text: headerButton.text; color: palette.darkText; font.family: "JetBrains Mono"; font.pixelSize: 10; font.bold: true; font.letterSpacing: 0.4; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-        background: Rectangle { color: headerButton.hovered ? Qt.lighter(headerButton.accent, 1.14) : headerButton.accent; border.color: headerButton.selected ? palette.text : palette.darkText; border.width: headerButton.selected ? 2 : 1; radius: 1 }
+        contentItem: Text { text: headerButton.text; color: headerButton.themeColors.darkText; font.family: "JetBrains Mono"; font.pixelSize: 10; font.bold: true; font.letterSpacing: 0.4; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+        background: Rectangle { color: headerButton.hovered ? Qt.lighter(headerButton.accent, 1.14) : headerButton.accent; border.color: headerButton.selected ? headerButton.themeColors.text : headerButton.themeColors.darkText; border.width: headerButton.selected ? 2 : 1; radius: 1 }
     }
     component SideItem: Item {
+        property var themeColors
         property string icon
         property string label
         property bool selected: false
         property color accent: palette.cyan
         signal clicked()
         Layout.fillWidth: true; Layout.preferredHeight: 32
-        Rectangle { anchors.fill: parent; color: selected ? palette.panel2 : (itemHover.containsMouse ? palette.panelHover : "transparent"); border.color: selected ? accent : (itemHover.containsMouse ? palette.line : "transparent"); border.width: 1; radius: 2 }
+        Rectangle { anchors.fill: parent; color: selected ? themeColors.panel2 : (itemHover.containsMouse ? themeColors.panelHover : "transparent"); border.color: selected ? accent : (itemHover.containsMouse ? themeColors.line : "transparent"); border.width: 1; radius: 2 }
         Row { anchors.fill: parent; anchors.leftMargin: 10; spacing: 10
             Text { text: icon; color: accent; font.family: "JetBrains Mono"; font.pixelSize: 14; anchors.verticalCenter: parent.verticalCenter }
-            Text { text: label; color: selected ? palette.text : (itemHover.containsMouse ? accent : palette.muted); font.family: "Inter"; font.pixelSize: 11; anchors.verticalCenter: parent.verticalCenter }
+            Text { text: label; color: selected ? themeColors.text : (itemHover.containsMouse ? accent : themeColors.muted); font.family: "Inter"; font.pixelSize: 11; anchors.verticalCenter: parent.verticalCenter }
         }
         MouseArea { id: itemHover; anchors.fill: parent; hoverEnabled: true; onClicked: parent.clicked() }
     }
