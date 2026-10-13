@@ -3,6 +3,7 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QDebug>
 #include <QtQuickControls2/QQuickStyle>
 
 int main(int argc, char *argv[]) {
@@ -14,8 +15,15 @@ int main(int argc, char *argv[]) {
 
     PhotoService photos;
     QQmlApplicationEngine engine;
+    QObject::connect(&engine, &QQmlEngine::warnings, &app, [](const QList<QQmlError> &warnings) {
+        for (const auto &warning : warnings) qCritical().noquote() << warning.toString();
+    });
     engine.rootContext()->setContextProperty("photoService", &photos);
-    engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
-    if (engine.rootObjects().isEmpty()) return 1;
+    const QUrl mainUrl(QStringLiteral("qrc:/qml/Main.qml"));
+    QObject::connect(&engine, &QQmlApplicationEngine::objectCreated, &app,
+                     [mainUrl](QObject *object, const QUrl &url) {
+        if (!object && url == mainUrl) QCoreApplication::exit(1);
+    });
+    engine.load(mainUrl);
     return app.exec();
 }

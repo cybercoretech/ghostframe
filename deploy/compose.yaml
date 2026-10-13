@@ -5,7 +5,7 @@ services:
       mariadb:
         condition: service_healthy
     ports:
-      - "2342:2342"
+      - "127.0.0.1:2342:2342"
     environment:
       PHOTOPRISM_ADMIN_USER: "${PHOTOPRISM_ADMIN_USER:-admin}"
       PHOTOPRISM_ADMIN_PASSWORD: "${PHOTOPRISM_ADMIN_PASSWORD:?Set PHOTOPRISM_ADMIN_PASSWORD in .env}"

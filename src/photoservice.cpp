@@ -121,6 +121,7 @@ void PhotoService::fetchPhotos(bool append) {
         const auto bytes = reply->readAll();
         const auto error = reply->error();
         const auto statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const auto previewTokenHeader = reply->rawHeader("X-Preview-Token");
         reply->deleteLater();
         m_loading = false;
         if (error != QNetworkReply::NoError || statusCode >= 400) {
@@ -131,6 +132,7 @@ void PhotoService::fetchPhotos(bool append) {
         }
         const auto doc = QJsonDocument::fromJson(bytes);
         if (!doc.isArray()) { setStatus("PhotoPrism returned an unexpected response."); return; }
+        if (!previewTokenHeader.isEmpty()) m_previewToken = QString::fromUtf8(previewTokenHeader);
         const auto array = doc.array();
         QVector<Photo> found;
         found.reserve(array.size());

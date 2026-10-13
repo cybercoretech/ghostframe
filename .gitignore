@@ -3,6 +3,7 @@
 /ghostframe
 /*.o
 /moc_predefs.h
+/moc_*.cpp
 /qml_Main_qml.cpp
 /qmlcache_loader.cpp
 /qrc_*.cpp
@@ -11,3 +12,6 @@
 *.user
 *.swp
 deploy/.env
+deploy/database/
+deploy/storage/
+deploy/originals/
