@@ -18,11 +18,11 @@ ApplicationWindow {
         readonly property color panel: "#0e1217"
         readonly property color panel2: "#151b22"
         readonly property color line: "#29323b"
-        readonly property color text: "#e8edf1"
-        readonly property color muted: "#77838e"
+        readonly property color text: "#f0f2f4"
+        readonly property color muted: "#a1abb5"
         readonly property color cyan: "#27e8ef"
         readonly property color pink: "#ff2c9c"
-        readonly property color lime: "#b8ff3b"
+        readonly property color lime: "#9dcc45"
     }
 
     property var selectedPhoto: null
@@ -75,9 +75,9 @@ ApplicationWindow {
                     background: Rectangle { color: palette.panel; border.color: searchField.activeFocus ? palette.cyan : palette.cyan; border.width: 1; radius: 2 }
                     onAccepted: photoService.search(text)
                 }
-                HeaderButton { text: "▦  LIBRARY"; accent: palette.pink; active: !showSettings; onClicked: { showSettings = false; selectedPhoto = null } }
-                HeaderButton { text: "⌘  SOURCE"; accent: palette.cyan; active: false; onClicked: Qt.openUrlExternally("https://github.com/cybercore-tech/ghostframe") }
-                HeaderButton { text: "⚙  SETTINGS"; accent: palette.lime; active: showSettings; onClicked: showSettings = !showSettings }
+                HeaderButton { text: "▦  LIBRARY"; accent: palette.pink; selected: !showSettings && photoService.selectedFolder === ""; onClicked: { showSettings = false; photoService.search(""); selectedPhoto = null } }
+                HeaderButton { text: "⌘  SOURCE"; accent: palette.cyan; selected: false; onClicked: Qt.openUrlExternally("https://github.com/cybercore-tech/ghostframe") }
+                HeaderButton { text: "⚙  SETTINGS"; accent: palette.lime; selected: showSettings; onClicked: showSettings = !showSettings }
             }
         }
 
@@ -88,15 +88,49 @@ ApplicationWindow {
                 Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: palette.line }
                 ColumnLayout {
                     anchors.fill: parent; anchors.margins: 18; spacing: 15
-                    Text { text: "◈  COLLECTIONS"; color: palette.lime; font.family: "JetBrains Mono"; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1 }
-                    SideItem { icon: "▦"; label: "All Images"; selected: !showSettings; accent: palette.cyan; onClicked: { showSettings = false; selectedPhoto = null } }
-                    SideItem { icon: "◷"; label: "Recently Added"; selected: false; accent: palette.pink; onClicked: { showSettings = false; photoService.search("") } }
+                    Text { text: "◈  COLLECTIONS"; color: palette.text; font.family: "JetBrains Mono"; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1 }
+                    SideItem { icon: "▦"; label: "All Images"; selected: !showSettings && photoService.selectedFolder === ""; accent: palette.cyan; onClicked: { showSettings = false; photoService.search(""); selectedPhoto = null } }
+                    SideItem { icon: "◷"; label: "Recently Added"; selected: false; accent: palette.pink; onClicked: { showSettings = false; photoService.search("order:newest") } }
                     SideItem { icon: "☆"; label: "Favorites"; selected: false; accent: palette.lime; onClicked: { showSettings = false; photoService.search("favorite:true") } }
-                    Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: palette.line; Layout.topMargin: 5; Layout.bottomMargin: 3 }
-                    Text { text: "◉  LIBRARY STATUS"; color: palette.muted; font.family: "JetBrains Mono"; font.pixelSize: 10; font.letterSpacing: 1 }
-                    Text { text: photoService.connected ? photoService.photoCount + " indexed items" : "No active connection"; color: palette.text; font.family: "JetBrains Mono"; font.pixelSize: 11; wrapMode: Text.Wrap; Layout.fillWidth: true }
-                    Item { Layout.fillHeight: true }
-                    Text { text: "LOCAL-FIRST  /  ORIGINALS STAY YOURS"; color: palette.muted; font.family: "JetBrains Mono"; font.pixelSize: 8; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                    Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: palette.line; Layout.topMargin: 2; Layout.bottomMargin: 1 }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text { text: "▤  FOLDERS"; color: palette.lime; font.family: "JetBrains Mono"; font.pixelSize: 10; font.bold: true; font.letterSpacing: 1; Layout.fillWidth: true }
+                        ToolButton {
+                            id: folderRefresh
+                            text: "↻"
+                            onClicked: photoService.refreshFolders()
+                            background: Rectangle {
+                                color: folderRefresh.hovered ? palette.panel2 : "transparent"
+                            }
+                            contentItem: Text {
+                                text: folderRefresh.text
+                                color: palette.muted
+                                font.pixelSize: 14
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
+                    ListView {
+                        id: folderList
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        Layout.minimumHeight: 90
+                        model: photoService.folders
+                        clip: true
+                        spacing: 2
+                        ScrollBar.vertical: ScrollBar { active: true }
+                        delegate: Item {
+                            required property var modelData
+                            width: folderList.width
+                            height: 28
+                            Rectangle { anchors.fill: parent; color: photoService.selectedFolder === modelData.path ? palette.panel2 : "transparent"; border.color: photoService.selectedFolder === modelData.path ? palette.cyan : "transparent"; border.width: 1; radius: 2 }
+                            Text { anchors.fill: parent; anchors.leftMargin: 9 + modelData.depth * 10; anchors.rightMargin: 8; verticalAlignment: Text.AlignVCenter; text: "▸  " + modelData.title; color: photoService.selectedFolder === modelData.path ? palette.text : palette.muted; font.family: "JetBrains Mono"; font.pixelSize: 10; elide: Text.ElideMiddle }
+                            MouseArea { anchors.fill: parent; onClicked: { showSettings = false; selectedPhoto = null; photoService.browseFolder(modelData.path) } }
+                        }
+                    }
+                    Text { text: photoService.connected ? photoService.photoCount + " indexed items" : "Connect PhotoPrism to browse"; color: palette.muted; font.family: "JetBrains Mono"; font.pixelSize: 9; wrapMode: Text.Wrap; Layout.fillWidth: true }
                 }
             }
 
@@ -176,10 +210,11 @@ ApplicationWindow {
     }
 
     component HeaderButton: Button {
+        id: headerButton
         property color accent: palette.cyan
-        property bool active: false
-        contentItem: Text { text: parent.text; color: parent.active ? palette.bg : palette.text; font.family: "JetBrains Mono"; font.pixelSize: 10; font.bold: true; font.letterSpacing: 0.4; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-        background: Rectangle { color: parent.active ? parent.accent : palette.bg; border.color: parent.accent; border.width: 1; radius: 1 }
+        property bool selected: false
+        contentItem: Text { text: headerButton.text; color: headerButton.selected ? palette.bg : palette.text; font.family: "JetBrains Mono"; font.pixelSize: 10; font.bold: true; font.letterSpacing: 0.4; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+        background: Rectangle { color: headerButton.selected ? headerButton.accent : (headerButton.hovered ? palette.panel2 : palette.bg); border.color: headerButton.accent; border.width: 1; radius: 1 }
     }
     component SideItem: Item {
         property string icon

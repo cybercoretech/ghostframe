@@ -13,7 +13,7 @@ Ghostframe is a native Qt Quick desktop client, not a rebranded PhotoPrism web b
 The current client foundation includes:
 
 - 🌌 A dark Cybercore desktop layout with a collection rail, image grid, status strip, and full-screen viewer.
-- 🔎 PhotoPrism API connection, bearer-token authentication, text search, and paged photo results.
+- 🔎 PhotoPrism API connection, bearer-token authentication, text search, paged photo results, and a nested browser for your original folders.
 - 🧭 Keyboard shortcuts: `Ctrl+K` focuses search, `Enter` runs it, `Ctrl+R` refreshes the current query, and `Esc` closes the viewer.
 - 🗝️ A session-only token field. Credentials are not written to disk by Ghostframe.
 - 🖼️ Capability-token thumbnails served directly by PhotoPrism, without sending account credentials in image URLs.
@@ -68,10 +68,10 @@ For the included Podman Compose service, create an app password tied to the Phot
 
 ```sh
 podman compose -f deploy/compose.yaml exec photoprism \
-  photoprism auth add -n Ghostframe -s "photos read" -e 31536000 admin
+  photoprism auth add -n Ghostframe -s "read" -e 31536000 admin
 ```
 
-Copy the app password shown by PhotoPrism into Ghostframe. It is used only for this session and is never stored by Ghostframe. Revoke it from PhotoPrism when you no longer need Ghostframe access.
+The generic `read` scope grants read-only API access across PhotoPrism resources, including the folders endpoint used by Ghostframe. Copy the app password shown by PhotoPrism into Ghostframe. It is used only for this session and is never stored by Ghostframe. Revoke it from PhotoPrism when you no longer need Ghostframe access.
 
 ### PhotoPrism server
 
@@ -121,6 +121,7 @@ The layout takes its visual cues from the Cybercore reference interface. It uses
 - [x] 🎨 Create the initial Cybercore theme and browse/search/viewer layout.
 - [x] 🔌 Verify authenticated photo search and thumbnail loading against the local PhotoPrism instance.
 - [ ] 🧪 Add robust API error states, query debounce, and image-loading refinements.
+- [x] 🗂️ Browse the nested originals folders from the sidebar.
 - [ ] 🗂️ Add album, people, and label browsing backed by PhotoPrism endpoints.
 - [ ] 📦 Finish an Omarchy/Arch package and desktop launcher.
 - [ ] 📱 Begin the separate Android uploader only after the desktop app is settled.

@@ -89,14 +89,79 @@ void PhotoService::connectToServer(const QString &url, const QString &token) {
         if (!m_connected) { m_connected = true; emit connectedChanged(); }
         m_offset = 0;
         m_hasMore = true;
+        fetchFolders();
         fetchPhotos(false);
     });
 }
 
 void PhotoService::search(const QString &query) {
+    if (!m_selectedFolder.isEmpty()) {
+        m_selectedFolder.clear();
+        emit selectedFolderChanged();
+    }
     if (m_query == query) return;
     m_query = query;
     if (m_connected) { m_offset = 0; m_hasMore = true; fetchPhotos(false); }
+}
+
+void PhotoService::browseFolder(const QString &path) {
+    const QString cleanPath = path.trimmed();
+    if (m_selectedFolder != cleanPath) {
+        m_selectedFolder = cleanPath;
+        emit selectedFolderChanged();
+    }
+    QString folderQuery;
+    if (!cleanPath.isEmpty()) {
+        QString escapedPath = cleanPath;
+        escapedPath.replace("\\", "\\\\");
+        escapedPath.replace("\"", "\\\"");
+        folderQuery = QStringLiteral("path:\"%1|%1/*\"").arg(escapedPath);
+    }
+    if (m_query == folderQuery && !m_photos.isEmpty()) return;
+    m_query = folderQuery;
+    if (m_connected) { m_offset = 0; m_hasMore = true; fetchPhotos(false); }
+}
+
+void PhotoService::refreshFolders() {
+    if (m_connected) fetchFolders();
+}
+
+void PhotoService::fetchFolders() {
+    if (!m_connected) return;
+    QUrl url = apiUrl("/api/v1/folders/originals");
+    QUrlQuery query;
+    query.addQueryItem("recursive", "true");
+    url.setQuery(query);
+    auto *reply = m_network.get(request(url));
+    connect(reply, &QNetworkReply::finished, this, [this, reply] {
+        const auto bytes = reply->readAll();
+        const auto error = reply->error();
+        const auto statusCode = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        reply->deleteLater();
+        if (error != QNetworkReply::NoError || statusCode >= 400) {
+            m_folders.clear();
+            emit foldersChanged();
+            return;
+        }
+        const auto response = QJsonDocument::fromJson(bytes).object();
+        const auto folderArray = response.value("folders").toArray();
+        QVariantList folders;
+        folders.reserve(folderArray.size());
+        for (const auto &value : folderArray) {
+            const auto folder = value.toObject();
+            const QString path = stringField(folder, {"Path", "path"});
+            if (path.isEmpty()) continue;
+            const QString title = stringField(folder, {"Title", "title"});
+            const int depth = path.count('/');
+            folders.append(QVariantMap{
+                {"path", path},
+                {"title", title.isEmpty() ? path.section('/', -1) : title},
+                {"depth", depth}
+            });
+        }
+        m_folders = std::move(folders);
+        emit foldersChanged();
+    });
 }
 
 void PhotoService::loadMore() {
@@ -104,7 +169,10 @@ void PhotoService::loadMore() {
 }
 
 void PhotoService::fetchPhotos(bool append) {
-    if (m_loading) return;
+    if (m_loading) {
+        if (!append) m_pendingRefresh = true;
+        return;
+    }
     m_loading = true;
     setStatus(m_query.isEmpty() ? "Loading your library…" : "Searching your library…");
     QUrl url = apiUrl("/api/v1/photos");
@@ -124,6 +192,11 @@ void PhotoService::fetchPhotos(bool append) {
         const auto previewTokenHeader = reply->rawHeader("X-Preview-Token");
         reply->deleteLater();
         m_loading = false;
+        if (m_pendingRefresh) {
+            m_pendingRefresh = false;
+            fetchPhotos(false);
+            return;
+        }
         if (error != QNetworkReply::NoError || statusCode >= 400) {
             setStatus(statusCode == 401 || statusCode == 403
                           ? "PhotoPrism rejected the token. Generate one with photo read access."
@@ -171,11 +244,15 @@ void PhotoService::disconnectFromServer() {
     m_serverUrl.clear();
     m_token.clear();
     m_previewToken.clear();
+    m_selectedFolder.clear();
+    m_folders.clear();
     m_offset = 0;
     m_hasMore = true;
     beginResetModel(); m_photos.clear(); endResetModel();
     emit connectedChanged();
     emit serverUrlChanged();
     emit photoCountChanged();
+    emit foldersChanged();
+    emit selectedFolderChanged();
     setStatus("Enter your PhotoPrism server details to connect.");
 }
