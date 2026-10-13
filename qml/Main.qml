@@ -142,7 +142,7 @@ ApplicationWindow {
                             Text { text: "PHOTOPRISM ENDPOINT"; color: palette.cyan; font.family: "JetBrains Mono"; font.pixelSize: 10; font.letterSpacing: 1 }
                             TextField { id: serverField; Layout.fillWidth: true; text: root.savedUrl; placeholderText: "http://127.0.0.1:2342"; color: palette.text; font.family: "JetBrains Mono"; background: Rectangle { color: palette.bg; border.color: palette.line; border.width: 1; radius: 2 } }
                             Text { text: "APP PASSWORD / SCOPED API TOKEN"; color: palette.cyan; font.family: "JetBrains Mono"; font.pixelSize: 10; font.letterSpacing: 1 }
-                            TextField { id: tokenField; Layout.fillWidth: true; placeholderText: "Token stays in memory for this session"; echoMode: TextInput.Password; color: palette.text; font.family: "JetBrains Mono"; background: Rectangle { color: palette.bg; border.color: palette.line; border.width: 1; radius: 2 } }
+                            TextField { id: tokenField; Layout.fillWidth: true; placeholderText: "Read-only app password · session only"; echoMode: TextInput.Password; color: palette.text; font.family: "JetBrains Mono"; background: Rectangle { color: palette.bg; border.color: palette.line; border.width: 1; radius: 2 } }
                             RowLayout { Layout.fillWidth: true
                                 Text { Layout.fillWidth: true; text: photoService.status; color: palette.muted; font.family: "Inter"; font.pixelSize: 10; wrapMode: Text.Wrap }
                                 Button { text: "CONNECT  →"; onClicked: { root.savedUrl = serverField.text; photoService.connectToServer(serverField.text, tokenField.text); tokenField.clear() }

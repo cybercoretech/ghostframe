@@ -18,12 +18,12 @@ services:
       PHOTOPRISM_DATABASE_PASSWORD: "${PHOTOPRISM_DATABASE_PASSWORD:?Set PHOTOPRISM_DATABASE_PASSWORD in .env}"
       PHOTOPRISM_DISABLE_FACES: "false"
       PHOTOPRISM_DISABLE_CLASSIFICATION: "false"
-      PHOTOPRISM_READONLY: "false"
-      PHOTOPRISM_DISABLE_WEBDAV: "false"
+      PHOTOPRISM_READONLY: "true"
+      PHOTOPRISM_DISABLE_WEBDAV: "true"
       TZ: "${TZ:-America/Los_Angeles}"
     volumes:
-      - ./originals:/photoprism/originals
-      - ./storage:/photoprism/storage
+      - /home/raven/Pictures:/photoprism/originals:ro
+      - /home/raven/Pictures/.ghostframe/storage:/photoprism/storage
     restart: unless-stopped
 
   mariadb:
@@ -34,7 +34,7 @@ services:
       MARIADB_USER: "photoprism"
       MARIADB_PASSWORD: "${PHOTOPRISM_DATABASE_PASSWORD:?Set PHOTOPRISM_DATABASE_PASSWORD in .env}"
     volumes:
-      - ./database:/var/lib/mysql
+      - /home/raven/Pictures/.ghostframe/database:/var/lib/mysql
     command: >-
       --innodb-buffer-pool-size=512M
       --transaction-isolation=READ-COMMITTED

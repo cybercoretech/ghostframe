@@ -4,7 +4,7 @@
 
 **Ghostframe** is a local-first, keyboard-friendly photo browser for Omarchy and Linux desktops. It connects to your own [PhotoPrism](https://www.photoprism.app/) library and gives it a distinct Cybercore interface: near-black surfaces, sharp borders, neon cyan/pink/lime accents, mono display type, and a distraction-free image viewer.
 
-> ⚡ **Status:** early development. The first desktop client is taking shape; the PhotoPrism service is a separate dependency. Android is deliberately a later project and will live in its own repository.
+> ⚡ **Status:** desktop MVP. The client builds and has been verified against the local PhotoPrism API and thumbnail service. Android is deliberately a later project and will live in its own repository.
 
 ## ✨ What Ghostframe is
 
@@ -62,21 +62,48 @@ make -j"$(nproc)"
 
 On first launch, enter your PhotoPrism URL and an API access token. Ghostframe keeps the token in memory for the current session; reconnect after restarting the app.
 
-### Create a read-only PhotoPrism token
+### Create a read-only PhotoPrism app password
 
-On the machine running PhotoPrism, create a scoped client token using its CLI:
+For the included Podman Compose service, create an app password tied to the PhotoPrism admin account and scoped to read photos:
 
 ```sh
-photoprism auth add -n Ghostframe -s "photos" -e 31536000
+podman compose -f deploy/compose.yaml exec photoprism \
+  photoprism auth add -n Ghostframe -s "photos read" -e 31536000 admin
 ```
 
-Copy the token shown by PhotoPrism into Ghostframe. Use the narrowest scope supported by your PhotoPrism version. You can revoke the token when you no longer need Ghostframe access.
+Copy the app password shown by PhotoPrism into Ghostframe. It is used only for this session and is never stored by Ghostframe. Revoke it from PhotoPrism when you no longer need Ghostframe access.
 
 ### PhotoPrism server
 
-Ghostframe is a client and does not install or configure the server automatically. Follow the [official PhotoPrism installation guide](https://docs.photoprism.app/getting-started/) to choose storage paths and configure its database. The app expects the API at `<server-url>/api/v1` and capability URLs for thumbnails.
+This repository includes a local Compose setup. It indexes `/home/raven/Pictures` read-only, keeps the PhotoPrism database and generated files under `/home/raven/Pictures/.ghostframe/`, and serves only on `127.0.0.1:2342` by default. Existing image folders remain unchanged. Start or stop the service with:
 
-For Android uploads, the first desktop release will use PhotoPrism's WebDAV support with a compatible sync app while we settle the desktop experience. A custom Ghostframe Android app is planned separately at [cybercore-tech/ghostframe-android-app](https://github.com/cybercore-tech/ghostframe-android-app), with its local worktree planned for `/home/raven/APK/GhostFrame`.
+```sh
+cd /home/raven/Work/ghostframe
+cp deploy/.env.example deploy/.env
+# Replace the example passwords in deploy/.env with unique secrets before first start.
+podman compose -f deploy/compose.yaml up -d
+podman compose -f deploy/compose.yaml down
+```
+
+The `deploy/.env` file holds the generated local database and admin credentials and is excluded from Git. For a different server, follow the [official PhotoPrism installation guide](https://docs.photoprism.app/getting-started/). The app expects the API at `<server-url>/api/v1` and capability URLs for thumbnails.
+
+The local Compose setup indexes `/home/raven/Pictures` read-only and keeps PhotoPrism's database and generated files in the hidden `/home/raven/Pictures/.ghostframe/` directory. Existing folders such as `Screenshots/2026-10-13/` stay in place; Ghostframe does not reorganize or edit your originals. The local service is read-only for now. A custom Ghostframe Android uploader is planned separately at [cybercore-tech/ghostframe-android-app](https://github.com/cybercore-tech/ghostframe-android-app), with its local worktree planned for `/home/raven/APK/GhostFrame`; its upload/import path will be added once the desktop app is settled.
+
+The current local layout is:
+
+```text
+/home/raven/Pictures/
+├── Screenshots/<date>/       # existing photo folders; left in place
+├── cybercore-bmc-cover.png   # existing image; left in place
+├── Ghostframe/
+│   ├── Inbox/                 # reserved for a future phone uploader
+│   └── Exports/               # optional exports created by you
+└── .ghostframe/
+    ├── database/              # PhotoPrism catalog database
+    └── storage/               # thumbnails, cache, and PhotoPrism settings
+```
+
+PhotoPrism scans the Pictures tree as a read-only originals library, so the existing screenshots and later Inbox uploads appear alongside each other without moving files. Keep `.ghostframe/` private and include its database and storage directories in backups; the actual photo files remain your originals.
 
 ## 🎛️ Interface direction
 
@@ -92,7 +119,7 @@ The layout takes its visual cues from the Cybercore reference interface. It uses
 
 - [x] 🧩 Establish the Qt Quick desktop shell and PhotoPrism API client.
 - [x] 🎨 Create the initial Cybercore theme and browse/search/viewer layout.
-- [ ] 🔌 Verify authentication and image loading against a running PhotoPrism instance.
+- [x] 🔌 Verify authenticated photo search and thumbnail loading against the local PhotoPrism instance.
 - [ ] 🧪 Add robust API error states, query debounce, and image-loading refinements.
 - [ ] 🗂️ Add album, people, and label browsing backed by PhotoPrism endpoints.
 - [ ] 📦 Finish an Omarchy/Arch package and desktop launcher.
