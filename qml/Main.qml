@@ -34,14 +34,21 @@ ApplicationWindow {
     property string savedUrl: photoService.serverUrl !== "" ? photoService.serverUrl : "http://127.0.0.1:2342"
     property string saveNotice: ""
 
+    function closeCurrentLayer() {
+        if (showEditor) { imageEditor.cancel(); showEditor = false }
+        else if (showSettings) showSettings = false
+        else if (selectedPhoto !== null) selectedPhoto = null
+        else Qt.quit()
+    }
+
     Shortcut { sequence: "Ctrl+K"; onActivated: searchField.forceActiveFocus() }
     Shortcut { sequence: "Escape"; onActivated: { if (showEditor) { imageEditor.cancel(); showEditor = false } else { selectedPhoto = null; showSettings = false } } }
     Shortcut { sequence: "Ctrl+R"; onActivated: photoService.search(searchField.text) }
     Shortcut {
         sequence: "Q"
         context: Qt.WindowShortcut
-        enabled: !searchField.activeFocus && !serverField.activeFocus && !tokenField.activeFocus
-        onActivated: Qt.quit()
+        enabled: !searchField.activeFocus && !serverField.activeFocus && !tokenField.activeFocus && !metaTitle.activeFocus && !metaCaption.activeFocus && !metaTags.activeFocus
+        onActivated: root.closeCurrentLayer()
     }
     Connections { target: photoService; function onConnectedChanged() { if (photoService.connected) root.showSettings = false } }
     Connections {
@@ -105,10 +112,10 @@ ApplicationWindow {
                 Button {
                     id: closeButton
                     text: "×"
-                    Accessible.name: "Close Ghostframe"
                     Layout.preferredWidth: 42
                     Layout.preferredHeight: 42
-                    onClicked: Qt.quit()
+                    Accessible.name: showSettings || showEditor || selectedPhoto !== null ? "Close current panel" : "Close Ghostframe"
+                    onClicked: root.closeCurrentLayer()
                     contentItem: Text { text: closeButton.text; color: palette.darkText; font.family: "Inter"; font.pixelSize: 25; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                     background: Rectangle { color: closeButton.hovered ? Qt.lighter(palette.pink, 1.14) : palette.pink; border.color: palette.darkText; border.width: 1; radius: 1 }
                 }
@@ -224,8 +231,15 @@ ApplicationWindow {
                     Text { text: showSettings ? "◈  CONNECT YOUR ARCHIVE" : "⌁  NO IMAGES IN VIEW"; color: palette.lime; font.family: "JetBrains Mono"; font.pixelSize: 17; font.bold: true; anchors.horizontalCenter: parent.horizontalCenter }
                     Text { text: showSettings ? "Ghostframe is your custom local browser. Connect it to a PhotoPrism instance to see your images." : photoService.status; color: palette.muted; font.family: "Inter"; font.pixelSize: 13; wrapMode: Text.Wrap; width: parent.width; horizontalAlignment: Text.AlignHCenter }
                     Rectangle {
-                        width: parent.width; height: 226; color: palette.panel; border.color: palette.line; radius: 2
+                        width: parent.width; height: 258; color: palette.panel; border.color: palette.line; radius: 2
                         ColumnLayout { anchors.fill: parent; anchors.margins: 18; spacing: 10
+                            RowLayout { Layout.fillWidth: true
+                                Text { text: "CONNECT YOUR ARCHIVE"; color: palette.lime; font.family: "JetBrains Mono"; font.pixelSize: 11; font.bold: true; Layout.fillWidth: true }
+                                Button { text: "×"; Accessible.name: "Close settings"; Layout.preferredWidth: 30; Layout.preferredHeight: 28; onClicked: root.showSettings = false
+                                    contentItem: Text { text: "×"; color: palette.darkText; font.pixelSize: 20; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                    background: Rectangle { color: palette.pink; border.color: palette.darkText; radius: 2 }
+                                }
+                            }
                             Text { text: "PHOTOPRISM ENDPOINT"; color: palette.cyan; font.family: "JetBrains Mono"; font.pixelSize: 10; font.letterSpacing: 1 }
                             TextField { id: serverField; Layout.fillWidth: true; text: root.savedUrl; placeholderText: "http://127.0.0.1:2342"; color: palette.text; font.family: "JetBrains Mono"; background: Rectangle { color: palette.bg; border.color: palette.line; border.width: 1; radius: 2 } }
                             Text { text: "APP PASSWORD / SCOPED API TOKEN"; color: palette.cyan; font.family: "JetBrains Mono"; font.pixelSize: 10; font.letterSpacing: 1 }
