@@ -15,14 +15,16 @@ ApplicationWindow {
     QtObject {
         id: palette
         readonly property color bg: "#080a0d"
-        readonly property color panel: "#0e1217"
-        readonly property color panel2: "#151b22"
+        readonly property color panel: "#0d1218"
+        readonly property color panel2: "#18212a"
+        readonly property color panelHover: "#202c36"
         readonly property color line: "#29323b"
-        readonly property color text: "#f0f2f4"
-        readonly property color muted: "#a1abb5"
-        readonly property color cyan: "#27e8ef"
-        readonly property color pink: "#ff2c9c"
-        readonly property color lime: "#9dcc45"
+        readonly property color text: "#edf1f4"
+        readonly property color muted: "#c0c8d0"
+        readonly property color darkText: "#101318"
+        readonly property color cyan: "#35f4ff"
+        readonly property color pink: "#ff36a8"
+        readonly property color lime: "#b4f33a"
     }
 
     property var selectedPhoto: null
@@ -125,9 +127,11 @@ ApplicationWindow {
                             required property var modelData
                             width: folderList.width
                             height: 28
-                            Rectangle { anchors.fill: parent; color: photoService.selectedFolder === modelData.path ? palette.panel2 : "transparent"; border.color: photoService.selectedFolder === modelData.path ? palette.cyan : "transparent"; border.width: 1; radius: 2 }
-                            Text { anchors.fill: parent; anchors.leftMargin: 9 + modelData.depth * 10; anchors.rightMargin: 8; verticalAlignment: Text.AlignVCenter; text: "▸  " + modelData.title; color: photoService.selectedFolder === modelData.path ? palette.text : palette.muted; font.family: "JetBrains Mono"; font.pixelSize: 10; elide: Text.ElideMiddle }
-                            MouseArea { anchors.fill: parent; onClicked: { showSettings = false; selectedPhoto = null; photoService.browseFolder(modelData.path) } }
+                            property color folderAccent: modelData.depth % 3 === 0 ? palette.cyan : (modelData.depth % 3 === 1 ? palette.pink : palette.lime)
+                            Rectangle { anchors.fill: parent; color: photoService.selectedFolder === modelData.path ? palette.panel2 : (folderHover.containsMouse ? palette.panelHover : "transparent"); border.color: photoService.selectedFolder === modelData.path ? folderAccent : (folderHover.containsMouse ? palette.line : "transparent"); border.width: 1; radius: 2 }
+                            Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom; width: 2; color: folderAccent; visible: photoService.selectedFolder === modelData.path || folderHover.containsMouse }
+                            Text { anchors.fill: parent; anchors.leftMargin: 10 + modelData.depth * 10; anchors.rightMargin: 8; verticalAlignment: Text.AlignVCenter; text: "›  " + modelData.title; color: photoService.selectedFolder === modelData.path ? folderAccent : (folderHover.containsMouse ? palette.text : palette.muted); font.family: "Inter"; font.pixelSize: 11; elide: Text.ElideMiddle }
+                            MouseArea { id: folderHover; anchors.fill: parent; hoverEnabled: true; onClicked: { showSettings = false; selectedPhoto = null; photoService.browseFolder(modelData.path) } }
                         }
                     }
                     Text { text: photoService.connected ? photoService.photoCount + " indexed items" : "Connect PhotoPrism to browse"; color: palette.muted; font.family: "JetBrains Mono"; font.pixelSize: 9; wrapMode: Text.Wrap; Layout.fillWidth: true }
@@ -213,8 +217,8 @@ ApplicationWindow {
         id: headerButton
         property color accent: palette.cyan
         property bool selected: false
-        contentItem: Text { text: headerButton.text; color: headerButton.selected ? palette.bg : palette.text; font.family: "JetBrains Mono"; font.pixelSize: 10; font.bold: true; font.letterSpacing: 0.4; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-        background: Rectangle { color: headerButton.selected ? headerButton.accent : (headerButton.hovered ? palette.panel2 : palette.bg); border.color: headerButton.accent; border.width: 1; radius: 1 }
+        contentItem: Text { text: headerButton.text; color: palette.darkText; font.family: "JetBrains Mono"; font.pixelSize: 10; font.bold: true; font.letterSpacing: 0.4; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+        background: Rectangle { color: headerButton.hovered ? Qt.lighter(headerButton.accent, 1.14) : headerButton.accent; border.color: headerButton.selected ? palette.text : palette.darkText; border.width: headerButton.selected ? 2 : 1; radius: 1 }
     }
     component SideItem: Item {
         property string icon
@@ -223,11 +227,11 @@ ApplicationWindow {
         property color accent: palette.cyan
         signal clicked()
         Layout.fillWidth: true; Layout.preferredHeight: 32
-        Rectangle { anchors.fill: parent; color: selected ? palette.panel2 : "transparent"; border.color: selected ? accent : "transparent"; border.width: 1; radius: 2 }
+        Rectangle { anchors.fill: parent; color: selected ? palette.panel2 : (itemHover.containsMouse ? palette.panelHover : "transparent"); border.color: selected ? accent : (itemHover.containsMouse ? palette.line : "transparent"); border.width: 1; radius: 2 }
         Row { anchors.fill: parent; anchors.leftMargin: 10; spacing: 10
             Text { text: icon; color: accent; font.family: "JetBrains Mono"; font.pixelSize: 14; anchors.verticalCenter: parent.verticalCenter }
-            Text { text: label; color: selected ? palette.text : palette.muted; font.family: "Inter"; font.pixelSize: 11; anchors.verticalCenter: parent.verticalCenter }
+            Text { text: label; color: selected ? palette.text : (itemHover.containsMouse ? accent : palette.muted); font.family: "Inter"; font.pixelSize: 11; anchors.verticalCenter: parent.verticalCenter }
         }
-        MouseArea { anchors.fill: parent; onClicked: parent.clicked() }
+        MouseArea { id: itemHover; anchors.fill: parent; hoverEnabled: true; onClicked: parent.clicked() }
     }
 }
