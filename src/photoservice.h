@@ -10,6 +10,7 @@ class PhotoService final : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(QString status READ status NOTIFY statusChanged)
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
+    Q_PROPERTY(bool startupConnecting READ startupConnecting NOTIFY startupConnectingChanged)
     Q_PROPERTY(QString serverUrl READ serverUrl NOTIFY serverUrlChanged)
     Q_PROPERTY(int photoCount READ rowCount NOTIFY photoCountChanged)
     Q_PROPERTY(QVariantList folders READ folders NOTIFY foldersChanged)
@@ -22,6 +23,7 @@ public:
     QHash<int, QByteArray> roleNames() const override;
     QString status() const { return m_status; }
     bool connected() const { return m_connected; }
+    bool startupConnecting() const { return m_startupConnecting; }
     QString serverUrl() const { return m_serverUrl; }
     QVariantList folders() const { return m_folders; }
     QString selectedFolder() const { return m_selectedFolder; }
@@ -37,6 +39,7 @@ public:
 signals:
     void statusChanged();
     void connectedChanged();
+    void startupConnectingChanged();
     void serverUrlChanged();
     void photoCountChanged();
     void foldersChanged();
@@ -64,5 +67,5 @@ private:
     QString m_serverUrl, m_token, m_previewToken, m_downloadToken, m_query, m_selectedFolder, m_credentialStatus;
     QTemporaryDir m_downloadDir;
     int m_offset = 0;
-    bool m_connected = false, m_loading = false, m_pendingRefresh = false, m_hasMore = true;
+    bool m_connected = false, m_startupConnecting = false, m_loading = false, m_pendingRefresh = false, m_hasMore = true;
 };

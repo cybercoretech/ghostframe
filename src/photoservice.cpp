@@ -23,6 +23,9 @@ PhotoService::PhotoService(QObject *parent) : QAbstractListModel(parent) {
         setStatus("Saved PhotoPrism address found; install GNOME Keyring/libsecret to restore its password automatically.");
         return;
     }
+    m_startupConnecting = true;
+    emit startupConnectingChanged();
+    setStatus("Restoring the saved PhotoPrism connection from your keyring…");
     auto *lookup = new QProcess(this);
     connect(lookup, &QProcess::finished, this, [this, lookup, savedUrl](int exitCode, QProcess::ExitStatus exitStatus) {
         const QString savedToken = QString::fromUtf8(lookup->readAllStandardOutput()).trimmed();
@@ -31,11 +34,15 @@ PhotoService::PhotoService(QObject *parent) : QAbstractListModel(parent) {
             connectToServer(savedUrl, savedToken);
             return;
         }
+        m_startupConnecting = false;
+        emit startupConnectingChanged();
         setStatus("Saved PhotoPrism address found; unlock the desktop keyring or enter the app password to reconnect.");
     });
     connect(lookup, &QProcess::errorOccurred, this, [this, lookup](QProcess::ProcessError error) {
         if (error != QProcess::FailedToStart) return;
         lookup->deleteLater();
+        m_startupConnecting = false;
+        emit startupConnectingChanged();
         setStatus("Could not access the desktop keyring. Enter the app password to reconnect.");
     });
     lookup->start(secretTool, {"lookup", "service", "ghostframe", "server", savedUrl});
@@ -115,6 +122,7 @@ void PhotoService::connectToServer(const QString &url, const QString &token) {
         const auto downloadTokenHeader = reply->rawHeader("X-Download-Token");
         reply->deleteLater();
         if (error != QNetworkReply::NoError || statusCode >= 400) {
+            if (m_startupConnecting) { m_startupConnecting = false; emit startupConnectingChanged(); }
             setStatus(statusCode == 401 || statusCode == 403
                           ? "Authentication failed. Check the app password or API token."
                           : "Could not reach PhotoPrism. Check the server address and connection.");
@@ -128,6 +136,7 @@ void PhotoService::connectToServer(const QString &url, const QString &token) {
         if (m_previewToken.isEmpty()) m_previewToken = QString::fromUtf8(previewTokenHeader);
         m_downloadToken = QString::fromUtf8(downloadTokenHeader);
         if (!m_connected) { m_connected = true; emit connectedChanged(); }
+        if (m_startupConnecting) { m_startupConnecting = false; emit startupConnectingChanged(); }
         m_offset = 0;
         m_hasMore = true;
         fetchFolders();

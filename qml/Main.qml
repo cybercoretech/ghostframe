@@ -29,7 +29,7 @@ ApplicationWindow {
 
     property var themeColors: palette
     property var selectedPhoto: null
-    property bool showSettings: !photoService.connected
+    property bool showSettings: !photoService.connected && !photoService.startupConnecting
     property bool showEditor: false
     property string savedUrl: photoService.serverUrl !== "" ? photoService.serverUrl : "http://127.0.0.1:2342"
     property string saveNotice: ""
@@ -50,7 +50,14 @@ ApplicationWindow {
         enabled: !searchField.activeFocus && !serverField.activeFocus && !tokenField.activeFocus && !metaTitle.activeFocus && !metaCaption.activeFocus && !metaTags.activeFocus
         onActivated: root.closeCurrentLayer()
     }
-    Connections { target: photoService; function onConnectedChanged() { if (photoService.connected) root.showSettings = false } }
+    Connections {
+        target: photoService
+        function onConnectedChanged() { if (photoService.connected) root.showSettings = false }
+        function onStartupConnectingChanged() {
+            if (photoService.startupConnecting) root.showSettings = false
+            else if (!photoService.connected) root.showSettings = true
+        }
+    }
     Connections {
         target: photoService
         function onOriginalDownloaded(title, hash, folder, filePath, originalName) {
