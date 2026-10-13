@@ -7,10 +7,31 @@
 #include <QFileInfo>
 #include <QNetworkReply>
 #include <QRegularExpression>
+#include <QProcess>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QUuid>
 #include <QUrlQuery>
 
-PhotoService::PhotoService(QObject *parent) : QAbstractListModel(parent) {}
+PhotoService::PhotoService(QObject *parent) : QAbstractListModel(parent) {
+    QSettings settings;
+    const QString savedUrl = settings.value("photoPrism/serverUrl").toString();
+    if (savedUrl.isEmpty()) return;
+    m_serverUrl = savedUrl;
+    const QString secretTool = QStandardPaths::findExecutable("secret-tool");
+    if (secretTool.isEmpty()) {
+        setStatus("Saved PhotoPrism address found; install GNOME Keyring/libsecret to restore its password automatically.");
+        return;
+    }
+    QProcess lookup;
+    lookup.start(secretTool, {"lookup", "service", "ghostframe", "server", savedUrl});
+    if (!lookup.waitForStarted(1500) || !lookup.waitForFinished(3000) || lookup.exitCode() != 0) {
+        setStatus("Saved PhotoPrism address found; unlock the desktop keyring to reconnect automatically.");
+        return;
+    }
+    const QString savedToken = QString::fromUtf8(lookup.readAllStandardOutput()).trimmed();
+    if (!savedToken.isEmpty()) connectToServer(savedUrl, savedToken);
+}
 
 int PhotoService::rowCount(const QModelIndex &parent) const {
     return parent.isValid() ? 0 : m_photos.size();
@@ -69,6 +90,7 @@ void PhotoService::connectToServer(const QString &url, const QString &token) {
         return;
     }
     m_serverUrl = parsed.toString(QUrl::StripTrailingSlash);
+    QSettings().setValue("photoPrism/serverUrl", m_serverUrl);
     m_token = token.trimmed();
     if (m_token.isEmpty()) {
         setStatus("Enter a PhotoPrism app password or scoped API token.");
@@ -90,6 +112,8 @@ void PhotoService::connectToServer(const QString &url, const QString &token) {
                           : "Could not reach PhotoPrism. Check the server address and connection.");
             return;
         }
+        const bool credentialStored = storeCredential();
+        m_credentialStatus = credentialStored ? " · password saved in desktop keyring" : " · keyring unavailable; password is session-only";
         const auto doc = QJsonDocument::fromJson(bytes);
         const auto obj = doc.object();
         m_previewToken = stringField(obj, {"previewToken", "PreviewToken", "preview_token"});
@@ -101,6 +125,17 @@ void PhotoService::connectToServer(const QString &url, const QString &token) {
         fetchFolders();
         fetchPhotos(false);
     });
+}
+
+bool PhotoService::storeCredential() {
+    const QString secretTool = QStandardPaths::findExecutable("secret-tool");
+    if (secretTool.isEmpty() || m_token.isEmpty()) return false;
+    QProcess store;
+    store.start(secretTool, {"store", "--label=Ghostframe PhotoPrism", "service", "ghostframe", "server", m_serverUrl});
+    if (!store.waitForStarted(1500)) return false;
+    if (store.write(m_token.toUtf8() + '\n') < 0) { store.kill(); return false; }
+    store.closeWriteChannel();
+    return store.waitForFinished(5000) && store.exitStatus() == QProcess::NormalExit && store.exitCode() == 0;
 }
 
 void PhotoService::search(const QString &query) {
@@ -294,7 +329,7 @@ void PhotoService::fetchPhotos(bool append) {
         m_hasMore = array.size() >= 80;
         emit photoCountChanged();
         setStatus(m_photos.isEmpty() ? "No images found. Index some photos in PhotoPrism, then refresh." :
-                  QString::number(m_photos.size()) + " images · connected to PhotoPrism");
+                  QString::number(m_photos.size()) + " images · connected to PhotoPrism" + m_credentialStatus);
     });
 }
 

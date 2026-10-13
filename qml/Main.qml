@@ -30,7 +30,8 @@ ApplicationWindow {
     property var themeColors: palette
     property var selectedPhoto: null
     property bool showSettings: !photoService.connected
-    property string savedUrl: "http://127.0.0.1:2342"
+    property bool showEditor: false
+    property string savedUrl: photoService.serverUrl !== "" ? photoService.serverUrl : "http://127.0.0.1:2342"
     property string saveNotice: ""
 
     Shortcut { sequence: "Ctrl+K"; onActivated: searchField.forceActiveFocus() }
@@ -228,7 +229,7 @@ ApplicationWindow {
                             Text { text: "PHOTOPRISM ENDPOINT"; color: palette.cyan; font.family: "JetBrains Mono"; font.pixelSize: 10; font.letterSpacing: 1 }
                             TextField { id: serverField; Layout.fillWidth: true; text: root.savedUrl; placeholderText: "http://127.0.0.1:2342"; color: palette.text; font.family: "JetBrains Mono"; background: Rectangle { color: palette.bg; border.color: palette.line; border.width: 1; radius: 2 } }
                             Text { text: "APP PASSWORD / SCOPED API TOKEN"; color: palette.cyan; font.family: "JetBrains Mono"; font.pixelSize: 10; font.letterSpacing: 1 }
-                            TextField { id: tokenField; Layout.fillWidth: true; placeholderText: "Read-only app password · session only"; echoMode: TextInput.Password; color: palette.text; font.family: "JetBrains Mono"; background: Rectangle { color: palette.bg; border.color: palette.line; border.width: 1; radius: 2 } }
+                            TextField { id: tokenField; Layout.fillWidth: true; placeholderText: "PhotoPrism app password · saved in desktop keyring"; echoMode: TextInput.Password; color: palette.text; font.family: "JetBrains Mono"; background: Rectangle { color: palette.bg; border.color: palette.line; border.width: 1; radius: 2 } }
                             RowLayout { Layout.fillWidth: true
                                 Text { Layout.fillWidth: true; text: photoService.status; color: palette.muted; font.family: "Inter"; font.pixelSize: 10; wrapMode: Text.Wrap }
                                 Button { text: "CONNECT  →"; onClicked: { root.savedUrl = serverField.text; photoService.connectToServer(serverField.text, tokenField.text); tokenField.clear() }
@@ -302,7 +303,7 @@ ApplicationWindow {
                                             if (cropWidth > 0.015 && cropHeight > 0.015) imageEditor.setCrop(left, top, cropWidth, cropHeight)
                                         }
                                     }
-                                    Text { anchors.centerIn: parent; visible: !imageEditor.ready && !imageEditor.busy; text: imageEditor.status; color: palette.muted; font.family: "JetBrains Mono"; font.pixelSize: 11; wrapMode: Text.Wrap; width: parent.width - 40; horizontalAlignment: Text.AlignHCenter }
+                                    Text { anchors.centerIn: parent; visible: editPreview.status !== Image.Ready; text: imageEditor.status; color: palette.muted; font.family: "JetBrains Mono"; font.pixelSize: 11; wrapMode: Text.Wrap; width: parent.width - 40; horizontalAlignment: Text.AlignHCenter }
                                 }
                                 ScrollView {
                                     Layout.preferredWidth: 330; Layout.fillHeight: true; clip: true

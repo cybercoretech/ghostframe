@@ -52,6 +52,7 @@ private:
     void setStatus(const QString &value);
     void fetchPhotos(bool append);
     void fetchFolders();
+    bool storeCredential();
     QNetworkRequest request(const QUrl &url) const;
     QUrl apiUrl(const QString &path) const;
     static QString stringField(const QJsonObject &obj, const QStringList &names);
@@ -60,7 +61,7 @@ private:
     QVector<Photo> m_photos;
     QVariantList m_folders;
     QString m_status = QStringLiteral("Enter your PhotoPrism server details to connect.");
-    QString m_serverUrl, m_token, m_previewToken, m_downloadToken, m_query, m_selectedFolder;
+    QString m_serverUrl, m_token, m_previewToken, m_downloadToken, m_query, m_selectedFolder, m_credentialStatus;
     QTemporaryDir m_downloadDir;
     int m_offset = 0;
     bool m_connected = false, m_loading = false, m_pendingRefresh = false, m_hasMore = true;

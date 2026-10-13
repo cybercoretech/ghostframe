@@ -111,6 +111,8 @@ void ImageEditor::cancel() {
     m_ready = false; emit readyChanged(); setBusy(false);
     if (!m_sourcePath.isEmpty() && m_sourcePath.startsWith(m_tempDir.path() + QDir::separator())) QFile::remove(m_sourcePath);
     m_sourcePath.clear();
+    m_title.clear(); m_hash.clear(); m_folder.clear(); m_originalName.clear();
+    m_previewUrl = QUrl(); emit previewChanged(); emit sourceChanged();
 }
 
 bool ImageEditor::writeCybermeta(const QString &path, const QString &title, const QString &caption, const QString &tags) const {
