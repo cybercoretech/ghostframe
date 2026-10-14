@@ -125,14 +125,19 @@ The layout takes its visual cues from the Cybercore reference interface. It uses
 
 ## 🗺️ Roadmap
 
-- [x] 🧩 Establish the Qt Quick desktop shell and PhotoPrism API client.
-- [x] 🎨 Create the initial Cybercore theme and browse/search/viewer layout.
-- [x] 🔌 Verify authenticated photo search and thumbnail loading against the local PhotoPrism instance.
-- [ ] 🧪 Add robust API error states, query debounce, and image-loading refinements.
-- [x] 🗂️ Browse the nested originals folders from the sidebar.
-- [ ] 🗂️ Add album, people, and label browsing backed by PhotoPrism endpoints.
-- [ ] 📦 Finish an Omarchy/Arch package and desktop launcher.
-- [ ] 📱 Begin the separate Android uploader only after the desktop app is settled.
+The full phase-by-phase build plan lives in **[docs/ROADMAP.md](docs/ROADMAP.md)** 🧭. Ghostframe is growing from a PhotoPrism browser into a Cybercore image system and editor:
+
+| | Phase | What it brings |
+|---|---|---|
+| 🧱 | **0 · Foundation** | UI split into components, in-process **libvips** engine with a live preview proxy, JSON edit recipes, undo/redo |
+| 🎛️ | **1 · Darkroom** | Exposure, curves, white balance, HSL, sharpen/denoise, straighten/perspective, histogram, before/after |
+| ✨ | **2 · Cyber FX** | Neon bloom, chromatic aberration, scanlines, glitch, CYBERGRID duotones, LUTs, Shorts/thumbnail export presets |
+| 🧬 | **3 · Cybermeta** | Metadata panel and GPS stripping on export through the [cybermeta](https://github.com/cybercore-tech/cybermeta) CLI |
+| 🗂️ | **4 · Library** | Ratings, culling, albums, compare view, batch export, Holodrive phone-inbox import |
+| 🖌️ | **5 · Local edits** | Masks, heal/clone, layers |
+| 🚀 | **6 · Shipping** | Live CYBERGRID theming, AUR package, project site |
+
+Already done ✅: the Qt Quick shell and PhotoPrism client, the Cybercore theme, authenticated search and thumbnails, the nested folder browser, keyring-free auto-reconnect, and the first built-in editor.
 
 ## 🛠️ Development notes
 
