@@ -55,7 +55,9 @@ private:
     void setStatus(const QString &value);
     void fetchPhotos(bool append);
     void fetchFolders();
-    bool storeCredential();
+    QString loadLocalCredential() const;
+    bool storeLocalCredential() const;
+    QString localCredentialPath() const;
     QNetworkRequest request(const QUrl &url) const;
     QUrl apiUrl(const QString &path) const;
     static QString stringField(const QJsonObject &obj, const QStringList &names);
