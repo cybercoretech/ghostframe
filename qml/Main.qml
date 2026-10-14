@@ -223,8 +223,9 @@ ApplicationWindow {
                         Rectangle {
                             anchors.fill: parent
                             color: theme.panel
-                            border.color: mouse.containsMouse ? theme.cyan : theme.line
-                            border.width: 1
+                            // Cyan frame at rest, pink when hovered — never a plain white box.
+                            border.color: mouse.containsMouse ? theme.pink : Qt.rgba(theme.cyan.r, theme.cyan.g, theme.cyan.b, 0.55)
+                            border.width: mouse.containsMouse ? 2 : 1
                             radius: 2
                             Rectangle {
                                 anchors.fill: parent
@@ -237,7 +238,7 @@ ApplicationWindow {
                                         Text { anchors.centerIn: parent; text: thumb.status === Image.Error ? "IMAGE UNAVAILABLE" : "◌  LOADING"; color: theme.muted; font.family: "JetBrains Mono"; font.pixelSize: 9 }
                                     }
                                 }
-                                Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 48; color: "#f20a0e13"; border.color: theme.line; border.width: 1 }
+                                Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 48; color: "#f20a0e13" }
                                 Rectangle { anchors.left: parent.left; anchors.bottom: parent.bottom; width: mouse.containsMouse ? 4 : 2; height: 48; color: mouse.containsMouse ? theme.pink : theme.cyan }
                                 Column { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 9; spacing: 3
                                     Text { width: parent.width; text: title; color: theme.text; font.family: "Inter"; font.pixelSize: 11; elide: Text.ElideRight }
