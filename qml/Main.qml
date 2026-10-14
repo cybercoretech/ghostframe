@@ -238,6 +238,7 @@ ApplicationWindow {
                     Text { text: showSettings ? "◈  CONNECT YOUR ARCHIVE" : "⌁  NO IMAGES IN VIEW"; color: palette.lime; font.family: "JetBrains Mono"; font.pixelSize: 17; font.bold: true; anchors.horizontalCenter: parent.horizontalCenter }
                     Text { text: showSettings ? "Ghostframe is your custom local browser. Connect it to a PhotoPrism instance to see your images." : photoService.status; color: palette.muted; font.family: "Inter"; font.pixelSize: 13; wrapMode: Text.Wrap; width: parent.width; horizontalAlignment: Text.AlignHCenter }
                     Rectangle {
+                        visible: showSettings
                         width: parent.width; height: 258; color: palette.panel; border.color: palette.line; radius: 2
                         ColumnLayout { anchors.fill: parent; anchors.margins: 18; spacing: 10
                             RowLayout { Layout.fillWidth: true
