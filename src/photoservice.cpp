@@ -4,13 +4,13 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QFile>
+#include <QDir>
 #include <QFileInfo>
 #include <QNetworkReply>
 #include <QRegularExpression>
-#include <QProcess>
 #include <QSettings>
 #include <QStandardPaths>
-#include <QUuid>
+#include <QSaveFile>
 #include <QUrlQuery>
 
 PhotoService::PhotoService(QObject *parent) : QAbstractListModel(parent) {
@@ -18,34 +18,18 @@ PhotoService::PhotoService(QObject *parent) : QAbstractListModel(parent) {
     const QString savedUrl = settings.value("photoPrism/serverUrl").toString();
     if (savedUrl.isEmpty()) return;
     m_serverUrl = savedUrl;
-    const QString secretTool = QStandardPaths::findExecutable("secret-tool");
-    if (secretTool.isEmpty()) {
-        setStatus("Saved PhotoPrism address found; install GNOME Keyring/libsecret to restore its password automatically.");
+
+    // Startup must never contact Secret Service: even storing an existing
+    // credential can ask the desktop to unlock its keyring.
+    const QString localToken = loadLocalCredential();
+    if (localToken.isEmpty()) {
+        setStatus("No saved connection on this machine. Configure your archive in Settings.");
         return;
     }
     m_startupConnecting = true;
     emit startupConnectingChanged();
-    setStatus("Restoring the saved PhotoPrism connection from your keyring…");
-    auto *lookup = new QProcess(this);
-    connect(lookup, &QProcess::finished, this, [this, lookup, savedUrl](int exitCode, QProcess::ExitStatus exitStatus) {
-        const QString savedToken = QString::fromUtf8(lookup->readAllStandardOutput()).trimmed();
-        lookup->deleteLater();
-        if (exitStatus == QProcess::NormalExit && exitCode == 0 && !savedToken.isEmpty()) {
-            connectToServer(savedUrl, savedToken);
-            return;
-        }
-        m_startupConnecting = false;
-        emit startupConnectingChanged();
-        setStatus("Saved PhotoPrism address found; unlock the desktop keyring or enter the app password to reconnect.");
-    });
-    connect(lookup, &QProcess::errorOccurred, this, [this, lookup](QProcess::ProcessError error) {
-        if (error != QProcess::FailedToStart) return;
-        lookup->deleteLater();
-        m_startupConnecting = false;
-        emit startupConnectingChanged();
-        setStatus("Could not access the desktop keyring. Enter the app password to reconnect.");
-    });
-    lookup->start(secretTool, {"lookup", "service", "ghostframe", "server", savedUrl});
+    setStatus("Restoring the saved PhotoPrism connection…");
+    connectToServer(savedUrl, localToken);
 }
 
 int PhotoService::rowCount(const QModelIndex &parent) const {
@@ -128,8 +112,10 @@ void PhotoService::connectToServer(const QString &url, const QString &token) {
                           : "Could not reach PhotoPrism. Check the server address and connection.");
             return;
         }
-        const bool credentialStored = storeCredential();
-        m_credentialStatus = credentialStored ? " · password saved in desktop keyring" : " · keyring unavailable; password is session-only";
+        const bool localStored = storeLocalCredential();
+        m_credentialStatus = localStored
+            ? " · saved on this machine"
+            : " · could not save connection; session only";
         const auto doc = QJsonDocument::fromJson(bytes);
         const auto obj = doc.object();
         m_previewToken = stringField(obj, {"previewToken", "PreviewToken", "preview_token"});
@@ -144,15 +130,29 @@ void PhotoService::connectToServer(const QString &url, const QString &token) {
     });
 }
 
-bool PhotoService::storeCredential() {
-    const QString secretTool = QStandardPaths::findExecutable("secret-tool");
-    if (secretTool.isEmpty() || m_token.isEmpty()) return false;
-    QProcess store;
-    store.start(secretTool, {"store", "--label=Ghostframe PhotoPrism", "service", "ghostframe", "server", m_serverUrl});
-    if (!store.waitForStarted(1500)) return false;
-    if (store.write(m_token.toUtf8() + '\n') < 0) { store.kill(); return false; }
-    store.closeWriteChannel();
-    return store.waitForFinished(5000) && store.exitStatus() == QProcess::NormalExit && store.exitCode() == 0;
+QString PhotoService::localCredentialPath() const {
+    return QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation)
+           + QStringLiteral("/photoprism.credential");
+}
+
+QString PhotoService::loadLocalCredential() const {
+    QFile credential(localCredentialPath());
+    if (!credential.open(QIODevice::ReadOnly)) return {};
+    credential.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    return QString::fromUtf8(credential.readAll()).trimmed();
+}
+
+bool PhotoService::storeLocalCredential() const {
+    if (m_token.isEmpty()) return false;
+    const QFileInfo info(localCredentialPath());
+    if (!QDir().mkpath(info.absolutePath())) return false;
+    QFile::setPermissions(info.absolutePath(), QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    QSaveFile credential(info.absoluteFilePath());
+    if (!credential.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
+    if (!credential.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner)) return false;
+    const QByteArray contents = m_token.toUtf8() + '\n';
+    if (credential.write(contents) != contents.size()) return false;
+    return credential.commit();
 }
 
 void PhotoService::search(const QString &query) {

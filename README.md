@@ -15,7 +15,7 @@ The current client foundation includes:
 - 🌌 A dark Cybercore desktop layout with a collection rail, image grid, status strip, and full-screen viewer.
 - 🔎 PhotoPrism API connection, bearer-token authentication, text search, paged photo results, and a nested browser for your original folders.
 - 🧭 Keyboard shortcuts: `Ctrl+K` focuses search, `Enter` runs it, `Ctrl+R` refreshes the current query, and `Esc` closes the viewer.
-- 🔐 PhotoPrism app passwords are kept in the desktop Secret Service keyring and restored on launch; Ghostframe stores only the server URL in its settings.
+- 🔐 PhotoPrism credentials are restored automatically on launch. Ghostframe saves the connection in an owner-only local file and never contacts the desktop keyring, so launching it cannot trigger a keyring unlock prompt.
 - 🖼️ Capability-token thumbnails served directly by PhotoPrism, without sending account credentials in image URLs.
 - 🎛️ Built-in image editor with 90° rotation, drag-to-crop, light, contrast, and saturation controls. Previews are rendered quickly while exports use the original full-resolution image.
 - 🧬 Cybermeta sidecars: each export gets an XMP file containing title, caption, tags, source identity, and the edit recipe. The image and metadata stay portable outside Ghostframe.
@@ -51,7 +51,7 @@ This initial design is **self-hosted, not end-to-end encrypted**. PhotoPrism nee
 - Linux desktop with Qt 6.5 or newer (development has been started with Qt 6.11).
 - `qmake6`, a C++20 compiler, and `make` to build from source.
 - A reachable PhotoPrism server. The default local address is `http://127.0.0.1:2342`.
-- A PhotoPrism app password with photo read access. GNOME Keyring/libsecret (`secret-tool`) stores it securely for automatic reconnects.
+- A PhotoPrism app password with photo read access. Ghostframe stores it in an owner-only local file for automatic reconnects.
 - ImageMagick 7 (`imagemagick`) for editor previews and full-resolution exports.
 
 ## 🚀 Build and run
@@ -64,7 +64,7 @@ make -j"$(nproc)"
 ./ghostframe
 ```
 
-On first launch, enter your PhotoPrism URL and app password once. Ghostframe verifies the connection and stores the credential in your desktop keyring, then reconnects automatically on later launches. If the keyring is locked or unavailable, Ghostframe continues with a session-only credential and explains the issue in its status line.
+On first launch, enter your PhotoPrism URL and app password once. Ghostframe verifies the connection and saves the credential in an owner-only file in its per-user configuration directory. It restores the connection automatically on later launches, without invoking Secret Service or asking to unlock a desktop keyring. Keep your Linux account protected; the local fallback is readable only by your account.
 
 ### Edit and export a photo
 
@@ -79,7 +79,7 @@ podman compose -f deploy/compose.yaml exec photoprism \
   photoprism auth add -n Ghostframe -s "read" -e 31536000 admin
 ```
 
-The generic `read` scope grants read-only API access across PhotoPrism resources, including the folders endpoint used by Ghostframe. Copy the app password shown by PhotoPrism into Ghostframe once; Ghostframe stores it in your local desktop keyring. Revoke it from PhotoPrism when you no longer need Ghostframe access.
+The generic `read` scope grants read-only API access across PhotoPrism resources, including the folders endpoint used by Ghostframe. Copy the app password shown by PhotoPrism into Ghostframe once; Ghostframe stores it locally for automatic reconnects. Revoke it from PhotoPrism when you no longer need Ghostframe access.
 
 ### PhotoPrism server
 
@@ -136,7 +136,7 @@ The layout takes its visual cues from the Cybercore reference interface. It uses
 
 ## 🛠️ Development notes
 
-Project entry point: `ghostframe.pro`. Qt Quick UI: `qml/Main.qml`. The API/model implementation is in `src/photoservice.*`. The authentication token is deliberately held in process memory only. Do not commit secrets, photo samples, or local PhotoPrism configuration.
+Project entry point: `ghostframe.pro`. Qt Quick UI: `qml/Main.qml`. The API/model implementation is in `src/photoservice.*`. The authentication token is saved in an owner-only file under the per-user configuration directory for automatic reconnects. Do not commit secrets, photo samples, or local PhotoPrism configuration.
 
 ## 📜 License
 
