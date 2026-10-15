@@ -1,6 +1,10 @@
 // Engine, recipe and history tests. Fixture images are generated at runtime,
 // so no binary samples live in the repo.
+#include "cubelut.h"
+#include "cybergrid.h"
 #include "edithistory.h"
+#include "fx.h"
+#include "looklibrary.h"
 #include "imageeditor.h"
 #include "previewprovider.h"
 #include "recipestore.h"
@@ -595,6 +599,295 @@ private slots:
             EditRecipe none;
             QVERIFY(!store.load(RecipeStore::keyForPath(QFileInfo(m_fixture).absoluteFilePath()), &none));
         }
+    }
+
+    // ── Phase 2: recipe, looks ─────────────────────────────────────────
+    void fxRecipeRoundTripsAndLooksSplit() {
+        EditRecipe r;
+        r.hasCrop = true; r.cropWidth = 0.5; r.straighten = 2;
+        r.gradientAmount = 60; r.gradientName = "Neon"; r.gradientColors = {"05010a", "ff36a8", "35f4ff"};
+        r.lutName = "teal.cube"; r.lutAmount = 70;
+        r.bloomAmount = 40; r.bloomThreshold = 55; r.bloomRadius = 30; r.aberrationAmount = 20;
+        r.glitchAmount = 35; r.glitchSeed = 9; r.pixelSortAmount = 25; r.pixelSortVertical = true;
+        r.halftoneAmount = 50; r.halftoneSize = 12; r.scanlineAmount = 30; r.scanlineSpacing = 6;
+        r.grainAmount = 20; r.grainSize = 2; r.vignetteAmount = -40; r.vignetteMidpoint = 30;
+        EditRecipe::TextLayer t; t.text = "NEON <COFFIN> & co"; t.anchor = 4; t.glow = 50; t.color = "ff36a8";
+        r.textLayers = {t};
+        EditRecipe back;
+        QVERIFY(EditRecipe::fromJson(QJsonDocument::fromJson(r.toJsonString().toUtf8()).object(), &back));
+        QCOMPARE(back, r);
+        QVERIFY(r.hasFx());
+
+        // A look carries no geometry or text; applying keeps the target's.
+        const QJsonObject look = r.lookJson();
+        const QString lookText = QJsonDocument(look).toJson();
+        QVERIFY(!lookText.contains("\"crop\"") && !lookText.contains("\"text\"") && !lookText.contains("straighten"));
+        EditRecipe target; target.rotation = 90; EditRecipe::TextLayer mark; mark.text = "©"; target.textLayers = {mark};
+        const EditRecipe styled = target.withLook(look);
+        QCOMPARE(styled.rotation, 90);
+        QCOMPARE(styled.textLayers.size(), 1);
+        QCOMPARE(styled.textLayers.first().text, QString("©"));
+        QCOMPARE(styled.bloomAmount, 40.0);
+        QVERIFY(!styled.hasCrop);
+
+        // Hostile input is cleaned up.
+        // (An ordinary string: moc's lexer mis-reads this JSON as a raw string.)
+        const auto hostile = QJsonDocument::fromJson(
+            "{\"version\":1,\"ops\":["
+            "{\"op\":\"lut\",\"name\":\"../../etc/passwd\"},"
+            "{\"op\":\"gradientMap\",\"amount\":500,\"colors\":[\"#FF0000\",\"nothex\",\"00ff00\"]},"
+            "{\"op\":\"text\",\"layers\":[{\"text\":\"x\",\"size\":9,\"anchor\":42,\"color\":\"zzz\",\"opacity\":7}]}]}").object();
+        QVERIFY(EditRecipe::fromJson(hostile, &back));
+        QCOMPARE(back.lutName, QString("passwd"));
+        QCOMPARE(back.gradientAmount, 100.0);
+        QCOMPARE(back.gradientColors, (QStringList{"ff0000", "00ff00"}));
+        QCOMPARE(back.textLayers.first().size, 0.5);
+        QCOMPARE(back.textLayers.first().anchor, 8);
+        QCOMPARE(back.textLayers.first().color, QString("35f4ff"));
+        QCOMPARE(back.textLayers.first().opacity, 1.0);
+    }
+
+    // ── Phase 2: effects ───────────────────────────────────────────────
+    void gradientMapFollowsItsStops() {
+        const VImage table = Fx::gradientTable({"000080", "ffff00"});
+        QCOMPARE(table.width(), 256);
+        QVERIFY(std::abs(pixel(table, 0)[2] - 128.0 / 255) < 0.01);
+        QVERIFY(std::abs(pixel(table, 255)[0] - 1.0) < 0.01);
+        QImage ramp(256, 4, QImage::Format_RGB888);
+        for (int x = 0; x < 256; ++x) for (int y = 0; y < 4; ++y) ramp.setPixelColor(x, y, QColor(x, x, x));
+        const QString path = m_dir.path() + "/gramp.png";
+        QVERIFY(ramp.save(path));
+        EditRecipe r; r.gradientAmount = 100; r.gradientColors = {"000080", "ffff00"};
+        const VImage out = ImageEngine::apply(ImageEngine::loadOriginal(path), r);
+        QVERIFY(std::abs(pixel(out, 0)[2] - 128) < 3 && pixel(out, 0)[0] < 3);   // dark → navy
+        QVERIFY(pixel(out, 255)[0] > 250 && pixel(out, 255)[2] < 5);            // light → yellow
+    }
+
+    void cubeLutParsesAndApplies() {
+        // A 2×2×2 inverting LUT.
+        QByteArray cube = "TITLE \"invert\"\nLUT_3D_SIZE 2\n";
+        for (int b = 0; b < 2; ++b) for (int g = 0; g < 2; ++g) for (int r = 0; r < 2; ++r)
+            cube += QByteArray::number(1 - r) + " " + QByteArray::number(1 - g) + " " + QByteArray::number(1 - b) + "\n";
+        CubeLut lut;
+        QString error;
+        QVERIFY2(CubeLut::parse(cube, &lut, &error), qPrintable(error));
+        float px[3] = {0.25f, 0.5f, 1.0f};
+        lut.apply(px, 1);
+        QVERIFY(std::abs(px[0] - 0.75f) < 1e-5 && std::abs(px[1] - 0.5f) < 1e-5 && std::abs(px[2]) < 1e-5);
+        QVERIFY(!CubeLut::parse("LUT_1D_SIZE 4\n0 0 0\n", &lut, &error));
+        QVERIFY(!CubeLut::parse("LUT_3D_SIZE 2\n0 0 0\n", &lut, &error));
+        QVERIFY(error.contains("Expected 8"));
+
+        // Through the library and a render.
+        const QString cubePath = m_dir.path() + "/invert.cube";
+        QFile f(cubePath); QVERIFY(f.open(QIODevice::WriteOnly)); f.write(cube); f.close();
+        LutLibrary::setDirectory(m_dir.path() + "/luts");
+        QCOMPARE(LutLibrary::import(cubePath, &error), QString("invert.cube"));
+        QCOMPARE(LutLibrary::names(), QStringList{"invert.cube"});
+        const QString solid = writeSolid(m_dir.path(), "lutin.png", QColor(40, 120, 200));
+        EditRecipe r; r.lutName = "invert.cube";
+        const auto p = pixel(ImageEngine::apply(ImageEngine::loadOriginal(solid), r));
+        QVERIFY(std::abs(p[0] - 215) <= 2 && std::abs(p[1] - 135) <= 2 && std::abs(p[2] - 55) <= 2);
+        r.lutName = "missing.cube";  // renders as no LUT, never fails
+        QCOMPARE(pixel(ImageEngine::apply(ImageEngine::loadOriginal(solid), r)), (std::vector<double>{40, 120, 200}));
+    }
+
+    void effectsDoWhatTheySay() {
+        // A dark frame with one bright square in the middle.
+        QImage spot(200, 200, QImage::Format_RGB888);
+        spot.fill(QColor(10, 10, 10));
+        for (int x = 90; x < 110; ++x) for (int y = 90; y < 110; ++y) spot.setPixelColor(x, y, Qt::white);
+        const QString spotPath = m_dir.path() + "/spot.png";
+        QVERIFY(spot.save(spotPath));
+        const VImage original = ImageEngine::loadOriginal(spotPath);
+
+        EditRecipe bloom; bloom.bloomAmount = 100; bloom.bloomThreshold = 50; bloom.bloomRadius = 12;
+        const VImage glowing = ImageEngine::apply(original, bloom);
+        QVERIFY(pixel(glowing, 120, 100)[0] > pixel(original, 120, 100)[0] + 15);  // glow beside the square
+        QVERIFY(pixel(glowing, 5, 5)[0] < 20);                                       // far corner stays dark
+
+        EditRecipe vignette; vignette.vignetteAmount = -100;
+        const VImage grey = ImageEngine::loadOriginal(writeSolid(m_dir.path(), "g200.png", QColor(200, 200, 200), {200, 200}));
+        const VImage vig = ImageEngine::apply(grey, vignette);
+        QVERIFY(pixel(vig, 0, 0)[0] < 60);
+        QVERIFY(pixel(vig, 100, 100)[0] > 195);
+
+        EditRecipe lines; lines.scanlineAmount = 100; lines.scanlineSpacing = 4;
+        const VImage lined = ImageEngine::apply(grey, lines);
+        QVERIFY(pixel(lined, 50, 0)[0] < pixel(lined, 50, 2)[0] - 50);
+
+        EditRecipe aberration; aberration.aberrationAmount = 100;
+        const VImage split = ImageEngine::apply(original, aberration);
+        QCOMPARE(split.width(), 200);
+        const auto edge = pixel(split, 110, 100);
+        QVERIFY(std::abs(edge[0] - edge[2]) > 20);  // red and blue no longer line up at the edge
+
+        EditRecipe halftone; halftone.halftoneAmount = 100; halftone.halftoneSize = 10;
+        QVERIFY(ImageEngine::apply(ImageEngine::loadOriginal(m_fixture), halftone).deviate()
+                > ImageEngine::loadOriginal(m_fixture).deviate());
+    }
+
+    // Regression: resizing a channel can round a pixel short in one dimension.
+    void aberrationWorksAtAnySize() {
+        const VImage original = ImageEngine::loadOriginal(m_fixture);
+        for (int amount : {1, 7, 15, 33, 100})
+            for (double cw : {0.5, 0.37, 0.731, 0.999}) {
+                EditRecipe r; r.aberrationAmount = amount;
+                r.hasCrop = true; r.cropWidth = cw; r.cropHeight = 1.0 - cw / 3;
+                const VImage out = ImageEngine::apply(original, r);
+                QCOMPARE(QSize(out.width(), out.height()), QSize(qRound(400 * cw), qRound(300 * (1.0 - cw / 3))));
+            }
+    }
+
+    void randomEffectsAreRepeatable() {
+        const VImage original = ImageEngine::loadOriginal(m_fixture);
+        EditRecipe a; a.glitchAmount = 80; a.glitchSeed = 5; a.grainAmount = 60;
+        const VImage one = ImageEngine::apply(original, a), two = ImageEngine::apply(original, a);
+        QCOMPARE((one - two).abs().max(), 0.0);
+        EditRecipe b = a; b.glitchSeed = 6;
+        QVERIFY((one - ImageEngine::apply(original, b)).abs().max() > 0);
+        QCOMPARE(one.width(), 400);
+        EditRecipe grainOnly; grainOnly.grainAmount = 50;
+        QVERIFY(std::abs(ImageEngine::apply(original, grainOnly).avg() - original.avg()) < 2);
+    }
+
+    void pixelSortOrdersBrightRuns() {
+        QImage noise(64, 16, QImage::Format_RGB888);
+        std::mt19937 rng(3);
+        std::uniform_int_distribution<int> value(140, 255);
+        for (int x = 0; x < 64; ++x) for (int y = 0; y < 16; ++y) { const int v = value(rng); noise.setPixelColor(x, y, QColor(v, v, v)); }
+        const QString path = m_dir.path() + "/sortme.png";
+        QVERIFY(noise.save(path));
+        EditRecipe r; r.pixelSortAmount = 100;  // threshold 0.1: everything sorts
+        const VImage sorted = ImageEngine::apply(ImageEngine::loadOriginal(path), r);
+        for (int y = 0; y < 16; ++y)
+            for (int x = 1; x < 64; ++x) QVERIFY(pixel(sorted, x, y)[0] >= pixel(sorted, x - 1, y)[0] - 1);
+    }
+
+    void textLayersLandWhereAnchored() {
+        const VImage black = ImageEngine::loadOriginal(writeSolid(m_dir.path(), "black.png", Qt::black, {400, 200}));
+        EditRecipe r;
+        EditRecipe::TextLayer t; t.text = "GHOST"; t.color = "ff36a8"; t.size = 0.2; t.anchor = 8; t.margin = 0.02;
+        r.textLayers = {t};
+        const VImage out = ImageEngine::apply(black, r);
+        // Pink appears in the bottom-right quarter and nowhere in the top-left.
+        QVERIFY(out.extract_area(200, 100, 200, 100)[0].max() > 200);
+        QCOMPARE(out.extract_area(0, 0, 200, 100).max(), 0.0);
+        EditRecipe empty; EditRecipe::TextLayer blank; blank.text = "   "; empty.textLayers = {blank};
+        QCOMPARE(ImageEngine::apply(black, empty).max(), 0.0);
+    }
+
+    void regionMatchesFullRenderWithFx() {
+        const VImage original = ImageEngine::loadOriginal(m_fixture);
+        EditRecipe r; r.vignetteAmount = -60; r.glitchAmount = 50; r.scanlineAmount = 40; r.bloomAmount = 30;
+        EditRecipe::TextLayer t; t.text = "ZOOM"; t.anchor = 4; r.textLayers = {t};
+        const VImage full = ImageEngine::apply(original, r);
+        ImageEngine::ApplyOptions options;
+        options.region = QRectF(0.25, 0.25, 0.5, 0.5);
+        const VImage part = ImageEngine::apply(original, r, options);
+        QCOMPARE((part - full.extract_area(100, 75, 200, 150)).abs().max(), 0.0);
+    }
+
+    void greyImagesBecomeColourForFx() {
+        QImage g(32, 32, QImage::Format_Grayscale8);
+        g.fill(128);
+        const QString path = m_dir.path() + "/grey8.png";
+        QVERIFY(g.save(path));
+        EditRecipe r; r.gradientAmount = 100; r.gradientColors = {"000000", "ff0000"};
+        const VImage out = ImageEngine::apply(ImageEngine::loadOriginal(path), r);
+        QCOMPARE(out.bands(), 3);
+        QVERIFY(pixel(out)[0] > 100 && pixel(out)[1] < 10);
+    }
+
+    // ── Phase 2: export presets ────────────────────────────────────────
+    void exportPresetsSizeAndFormat() {
+        EditRecipe r;
+        QString error;
+        auto exportAs = [&](const QString &name, ImageEngine::ExportOptions o) {
+            const QString out = m_dir.path() + "/" + name;
+            if (!ImageEngine::exportImage(m_fixture, r, out, o, &error)) qWarning("%s", qPrintable(error));
+            return out;
+        };
+        ImageEngine::ExportOptions shorts; shorts.size = {1080, 1920};
+        QCOMPARE(ImageEngine::sourceSize(exportAs("shorts.jpg", shorts)), QSize(1080, 1920));
+        shorts.fit = ImageEngine::ExportOptions::FitBlur;
+        QCOMPARE(ImageEngine::sourceSize(exportAs("shorts-blur.webp", shorts)), QSize(1080, 1920));
+        ImageEngine::ExportOptions padded; padded.size = {300, 300}; padded.fit = ImageEngine::ExportOptions::FitPad; padded.padColor = "ff0000";
+        const VImage pad = ImageEngine::loadOriginal(exportAs("padded.png", padded));
+        QCOMPARE(QSize(pad.width(), pad.height()), QSize(300, 300));
+        QCOMPARE(pixel(pad, 150, 2), (std::vector<double>{255, 0, 0}));  // bar above the 300×225 image
+        ImageEngine::ExportOptions web; web.quality = 60;
+        const QString avif = exportAs("web.avif", web);
+        QVERIFY2(QFileInfo(avif).size() > 0, qPrintable(error));
+        QCOMPARE(ImageEngine::sourceSize(avif), QSize(400, 300));
+    }
+
+    // ── Phase 2: CYBERGRID and looks ───────────────────────────────────
+    void cybergridPalettesAndGradients() {
+        QTemporaryDir config;
+        QDir().mkpath(config.path() + "/themes");
+        QFile custom(config.path() + "/themes/my-neon.json");
+        QVERIFY(custom.open(QIODevice::WriteOnly));
+        custom.write(R"({"id":"my-neon","palette":{"bg":"000000","white":"ffffff","acid_green":"00ff00","hot_pink":"ff00ff","purple":"440088","cyan":"00ffff","orange":"ff8800","red":"ff0000","panel":"111111","line":"222222","muted":"777777"}})");
+        custom.close();
+        qputenv("CYBERCORE_CONFIG_DIR", config.path().toUtf8());
+        const CyberGrid grid;
+        qunsetenv("CYBERCORE_CONFIG_DIR");
+        QVERIFY(grid.themes().size() >= 82);
+        QCOMPARE(grid.gradient("my-neon", "neon"), (QStringList{"000000", "440088", "ff00ff", "00ffff", "ffffff"}));
+        QCOMPARE(grid.gradient("cyberdyne-hunter", "duo-pink").size(), 2);
+        QVERIFY(grid.gradient("nope", "neon").isEmpty());
+        QVERIFY(grid.styles().size() >= 6);
+    }
+
+    void lookLibraryBuiltInsAndYours() {
+        const LookLibrary looks(m_dir.path() + "/looks");
+        QStringList names;
+        for (const auto &l : looks.list()) names.append(l.toMap().value("name").toString());
+        for (const char *expected : {"Neon Noir", "Neon Coffin", "Blackbox Terminal", "Synthwave Sunset", "Ghost Signal"})
+            QVERIFY2(names.contains(expected), expected);
+        // Every built-in parses and has an effect.
+        for (const QString &name : names) {
+            EditRecipe r;
+            QVERIFY2(EditRecipe::fromJson(looks.recipe(name), &r), qPrintable(name));
+            QVERIFY2(!r.isIdentity(), qPrintable(name));
+        }
+        EditRecipe mine; mine.bloomAmount = 77;
+        QVERIFY(looks.save("Neon Noir", mine.lookJson()));  // yours shadows the built-in
+        EditRecipe loaded;
+        QVERIFY(EditRecipe::fromJson(looks.recipe("Neon Noir"), &loaded));
+        QCOMPARE(loaded.bloomAmount, 77.0);
+        QVERIFY(looks.remove("Neon Noir"));
+        QVERIFY(EditRecipe::fromJson(looks.recipe("Neon Noir"), &loaded));
+        QVERIFY(loaded.bloomAmount != 77.0);  // built-in again
+    }
+
+    void editorLooksTextAndPresetExport() {
+        ImageEditor editor;
+        editor.setRecipeStore(RecipeStore(m_dir.path() + "/p2-recipes"));
+        editor.setLookLibrary(LookLibrary(m_dir.path() + "/p2-looks"));
+        const QString exports = m_dir.path() + "/p2-exports";
+        editor.setExportDirectory(exports);
+        editor.openLocalFile(m_fixture);
+        QTRY_VERIFY(editor.ready());
+        editor.setCrop(0, 0, 0.5, 1);
+        editor.applyLook("Blackbox Terminal");
+        QVERIFY(editor.currentRecipe().hasCrop);
+        QVERIFY(editor.currentRecipe().scanlineAmount > 0);
+        editor.addTextLayer("NEON COFFIN");
+        editor.setTextLayer(0, "anchor", 4, true);
+        QCOMPARE(editor.currentRecipe().textLayers.first().anchor, 4);
+        QCOMPARE(editor.historyLabels().mid(1), (QStringList{"Crop", "Look: Blackbox Terminal", "Add text", "Text anchor"}));
+        editor.removeTextLayer(0);
+        QVERIFY(editor.currentRecipe().textLayers.isEmpty());
+
+        QSignalSpy saved(&editor, &ImageEditor::saved);
+        editor.save("t", "", "", QVariantMap{{"preset", "Shorts"}, {"width", 1080}, {"height", 1920}, {"fit", "blur"}, {"format", "webp"}, {"quality", 80}});
+        QTRY_VERIFY2_WITH_TIMEOUT(saved.count() == 1, qPrintable(editor.status()), 15000);
+        const QString path = saved.first().first().toString();
+        QVERIFY(path.contains("-Ghostframe-shorts-") && path.endsWith(".webp"));
+        QCOMPARE(ImageEngine::sourceSize(path), QSize(1080, 1920));
+        editor.cancel();
     }
 
     // Phase 0 target: a preview render on the proxy well under 100 ms.

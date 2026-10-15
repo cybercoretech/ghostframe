@@ -1,0 +1,1 @@
+{"name":"Faded Polaroid","recipe":{"version":1,"ops":[{"op":"whiteBalance","temperature":15,"tint":0},{"op":"tone","blacks":30,"whites":-5,"shadows":10,"highlights":-10},{"op":"brightnessContrast","brightness":0,"contrast":-15},{"op":"saturation","percent":85},{"op":"grain","amount":25,"size":1.8},{"op":"vignette","amount":-20,"midpoint":50}]}}

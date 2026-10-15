@@ -1,0 +1,13 @@
+<RCC>
+    <qresource prefix="/looks">
+        <file alias="blackbox-terminal.json">assets/looks/blackbox-terminal.json</file>
+        <file alias="chrome-drip.json">assets/looks/chrome-drip.json</file>
+        <file alias="cyberdyne-red.json">assets/looks/cyberdyne-red.json</file>
+        <file alias="faded-polaroid.json">assets/looks/faded-polaroid.json</file>
+        <file alias="ghost-signal.json">assets/looks/ghost-signal.json</file>
+        <file alias="halftone-zine.json">assets/looks/halftone-zine.json</file>
+        <file alias="neon-coffin.json">assets/looks/neon-coffin.json</file>
+        <file alias="neon-noir.json">assets/looks/neon-noir.json</file>
+        <file alias="synthwave-sunset.json">assets/looks/synthwave-sunset.json</file>
+    </qresource>
+</RCC>

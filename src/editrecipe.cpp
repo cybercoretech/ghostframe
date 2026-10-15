@@ -1,6 +1,7 @@
 #include "editrecipe.h"
 
 #include <QJsonArray>
+#include <QRegularExpression>
 #include <QJsonDocument>
 #include <QtGlobal>
 
@@ -42,7 +43,53 @@ const Field kFields[] = {
     {"sharpenAmount", "sharpen", "amount", &EditRecipe::sharpenAmount, 0, 300, 0},
     {"sharpenRadius", "sharpen", "radius", &EditRecipe::sharpenRadius, 0.5, 3, 1},
     {"sharpenThreshold", "sharpen", "threshold", &EditRecipe::sharpenThreshold, 0, 100, 0},
+    {"gradientAmount", "gradientMap", "amount", &EditRecipe::gradientAmount, 0, 100, 0},
+    {"lutAmount", "lut", "amount", &EditRecipe::lutAmount, 0, 100, 100},
+    {"bloomAmount", "bloom", "amount", &EditRecipe::bloomAmount, 0, 100, 0},
+    {"bloomThreshold", "bloom", "threshold", &EditRecipe::bloomThreshold, 0, 100, 70},
+    {"bloomRadius", "bloom", "radius", &EditRecipe::bloomRadius, 1, 120, 20},
+    {"aberrationAmount", "chromaticAberration", "amount", &EditRecipe::aberrationAmount, 0, 100, 0},
+    {"glitchAmount", "glitch", "amount", &EditRecipe::glitchAmount, 0, 100, 0},
+    {"glitchSeed", "glitch", "seed", &EditRecipe::glitchSeed, 0, 999, 1},
+    {"pixelSortAmount", "pixelSort", "amount", &EditRecipe::pixelSortAmount, 0, 100, 0},
+    {"halftoneAmount", "halftone", "amount", &EditRecipe::halftoneAmount, 0, 100, 0},
+    {"halftoneSize", "halftone", "size", &EditRecipe::halftoneSize, 3, 60, 8},
+    {"scanlineAmount", "scanlines", "amount", &EditRecipe::scanlineAmount, 0, 100, 0},
+    {"scanlineSpacing", "scanlines", "spacing", &EditRecipe::scanlineSpacing, 2, 24, 4},
+    {"grainAmount", "grain", "amount", &EditRecipe::grainAmount, 0, 100, 0},
+    {"grainSize", "grain", "size", &EditRecipe::grainSize, 0.5, 4, 1.5},
+    {"vignetteAmount", "vignette", "amount", &EditRecipe::vignetteAmount, -100, 100, 0},
+    {"vignetteMidpoint", "vignette", "midpoint", &EditRecipe::vignetteMidpoint, 0, 100, 50},
 };
+
+// Ops that belong to a "look" (everything but geometry and text).
+const char *kGeometryOps[] = {"rotate", "flip", "straighten", "perspective", "crop"};
+
+QString hexColour(const QString &value, const QString &fallback) {
+    QString hex = value.trimmed();
+    if (hex.startsWith('#')) hex.remove(0, 1);
+    static const QRegularExpression valid("^[0-9a-fA-F]{6}$");
+    return valid.match(hex).hasMatch() ? hex.toLower() : fallback;
+}
+
+QJsonObject textLayerToJson(const EditRecipe::TextLayer &t) {
+    return {{"text", t.text}, {"font", t.font}, {"color", t.color}, {"size", t.size}, {"anchor", t.anchor},
+            {"margin", t.margin}, {"opacity", t.opacity}, {"glow", t.glow}, {"bold", t.bold}};
+}
+
+EditRecipe::TextLayer textLayerFromMap(const QVariantMap &m) {
+    EditRecipe::TextLayer t;
+    t.text = m.value("text").toString().left(500);
+    if (m.contains("font") && !m.value("font").toString().trimmed().isEmpty()) t.font = m.value("font").toString().left(80);
+    t.color = hexColour(m.value("color").toString(), t.color);
+    if (m.contains("size")) t.size = qBound(0.01, m.value("size").toDouble(), 0.5);
+    if (m.contains("anchor")) t.anchor = qBound(0, m.value("anchor").toInt(), 8);
+    if (m.contains("margin")) t.margin = qBound(0.0, m.value("margin").toDouble(), 0.4);
+    if (m.contains("opacity")) t.opacity = qBound(0.0, m.value("opacity").toDouble(), 1.0);
+    if (m.contains("glow")) t.glow = qBound(0.0, m.value("glow").toDouble(), 100.0);
+    if (m.contains("bold")) t.bold = m.value("bold").toBool();
+    return t;
+}
 
 const char *kCurveNames[] = {"master", "red", "green", "blue"};
 
@@ -89,6 +136,12 @@ const std::array<const char *, EditRecipe::HslBandCount> &EditRecipe::hslBandNam
     static const std::array<const char *, HslBandCount> names{"red", "orange", "yellow", "green",
                                                               "aqua", "blue", "purple", "magenta"};
     return names;
+}
+
+bool EditRecipe::hasFx() const {
+    return (gradientAmount > 0 && gradientColors.size() >= 2) || !lutName.isEmpty() || bloomAmount > 0
+           || aberrationAmount > 0 || glitchAmount > 0 || pixelSortAmount > 0 || halftoneAmount > 0
+           || scanlineAmount > 0 || grainAmount > 0 || vignetteAmount != 0;
 }
 
 bool EditRecipe::hasGeometry() const {
@@ -151,6 +204,26 @@ QJsonObject EditRecipe::toJson() const {
     if (!bands.isEmpty()) ops.append(QJsonObject{{"op", "hsl"}, {"bands", bands}});
     emitFields("noiseReduction");
     emitFields("sharpen");
+    if (!gradientColors.isEmpty() || gradientAmount != 0) {
+        QJsonObject op{{"op", "gradientMap"}, {"amount", gradientAmount}, {"name", gradientName},
+                       {"colors", QJsonArray::fromStringList(gradientColors)}};
+        ops.append(op);
+    }
+    if (!lutName.isEmpty()) ops.append(QJsonObject{{"op", "lut"}, {"name", lutName}, {"amount", lutAmount}});
+    emitFields("bloom");
+    emitFields("chromaticAberration");
+    emitFields("glitch");
+    if (pixelSortAmount != 0)
+        ops.append(QJsonObject{{"op", "pixelSort"}, {"amount", pixelSortAmount}, {"vertical", pixelSortVertical}});
+    emitFields("halftone");
+    emitFields("scanlines");
+    emitFields("grain");
+    emitFields("vignette");
+    if (!textLayers.isEmpty()) {
+        QJsonArray layers;
+        for (const auto &t : textLayers) layers.append(textLayerToJson(t));
+        ops.append(QJsonObject{{"op", "text"}, {"layers", layers}});
+    }
     return {{"version", Version}, {"ops", ops}};
 }
 
@@ -188,6 +261,23 @@ bool EditRecipe::fromJson(const QJsonObject &json, EditRecipe *out) {
                                     qBound(-100.0, b.value("saturation").toDouble(), 100.0),
                                     qBound(-100.0, b.value("luminance").toDouble(), 100.0)};
             }
+        } else if (name == "gradientMap") {
+            r.gradientAmount = qBound(0.0, op.value("amount").toDouble(), 100.0);
+            r.gradientName = op.value("name").toString().left(120);
+            for (const auto &c : op.value("colors").toArray()) {
+                const QString hex = hexColour(c.toString(), QString());
+                if (!hex.isEmpty()) r.gradientColors.append(hex);
+            }
+            r.gradientColors = r.gradientColors.mid(0, 16);
+        } else if (name == "lut") {
+            r.lutName = op.value("name").toString().section('/', -1).left(200);  // a file name, never a path
+            r.lutAmount = qBound(0.0, op.value("amount").toDouble(100), 100.0);
+        } else if (name == "pixelSort") {
+            r.pixelSortAmount = qBound(0.0, op.value("amount").toDouble(), 100.0);
+            r.pixelSortVertical = op.value("vertical").toBool();
+        } else if (name == "text") {
+            for (const auto &layer : op.value("layers").toArray())
+                if (r.textLayers.size() < 16) r.textLayers.append(textLayerFromMap(layer.toObject().toVariantMap()));
         } else {
             for (const auto &f : kFields)
                 if (name == QLatin1String(f.op) && op.contains(f.field))
@@ -213,6 +303,13 @@ QVariantMap EditRecipe::toVariantMap() const {
         for (const auto &p : this->*curveMember(i)) points.append(QVariant(QVariantList{p.x(), p.y()}));
         map.insert(QString("curve.") + kCurveNames[i], points);
     }
+    map.insert("gradientColors", gradientColors);
+    map.insert("gradientName", gradientName);
+    map.insert("lutName", lutName);
+    map.insert("pixelSortVertical", pixelSortVertical);
+    QVariantList layers;
+    for (const auto &t : textLayers) layers.append(textLayerToJson(t).toVariantMap());
+    map.insert("textLayers", layers);
     for (int i = 0; i < HslBandCount; ++i) {
         const QString band = QString("hsl.") + hslBandNames()[size_t(i)];
         map.insert(band + ".hue", hsl[size_t(i)].hue);
@@ -233,6 +330,23 @@ bool EditRecipe::setParameter(const QString &key, const QVariant &value) {
         return true;
     }
     if (key == "flipHorizontal") { flipHorizontal = value.toBool(); return true; }
+    if (key == "pixelSortVertical") { pixelSortVertical = value.toBool(); return true; }
+    if (key == "gradientName") { gradientName = value.toString().left(120); return true; }
+    if (key == "lutName") { lutName = value.toString().section('/', -1).left(200); return true; }
+    if (key == "gradientColors") {
+        gradientColors.clear();
+        for (const auto &c : value.toStringList()) {
+            const QString hex = hexColour(c, QString());
+            if (!hex.isEmpty() && gradientColors.size() < 16) gradientColors.append(hex);
+        }
+        return true;
+    }
+    if (key == "textLayers") {
+        textLayers.clear();
+        for (const auto &layer : value.toList())
+            if (textLayers.size() < 16) textLayers.append(textLayerFromMap(layer.toMap()));
+        return true;
+    }
     if (key == "flipVertical") { flipVertical = value.toBool(); return true; }
     if (key.startsWith("curve.")) {
         for (int i = 0; i < 4; ++i)
@@ -254,4 +368,30 @@ bool EditRecipe::setParameter(const QString &key, const QVariant &value) {
         }
     }
     return false;
+}
+
+QJsonObject EditRecipe::lookJson() const {
+    QJsonArray ops;
+    for (const auto &value : toJson().value("ops").toArray()) {
+        const QString name = value.toObject().value("op").toString();
+        if (name == "text") continue;
+        if (std::any_of(std::begin(kGeometryOps), std::end(kGeometryOps), [&](const char *g) { return name == QLatin1String(g); }))
+            continue;
+        ops.append(value);
+    }
+    return {{"version", Version}, {"ops", ops}};
+}
+
+EditRecipe EditRecipe::withLook(const QJsonObject &look) const {
+    EditRecipe parsed;
+    if (!fromJson(look, &parsed)) return *this;
+    // Keep this recipe's geometry and text; everything else comes from the look.
+    EditRecipe out = parsed;
+    out.rotation = rotation;
+    out.flipHorizontal = flipHorizontal; out.flipVertical = flipVertical;
+    out.straighten = straighten;
+    out.perspectiveVertical = perspectiveVertical; out.perspectiveHorizontal = perspectiveHorizontal;
+    out.hasCrop = hasCrop; out.cropX = cropX; out.cropY = cropY; out.cropWidth = cropWidth; out.cropHeight = cropHeight;
+    out.textLayers = textLayers;
+    return out;
 }

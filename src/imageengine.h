@@ -67,9 +67,22 @@ vips::VImage clippingOverlay(const vips::VImage &image);
 // QImage in Cybercore colours.
 QImage histogramImage(const vips::VImage &image, QSize size = {256, 90});
 
-// Renders the recipe on the full-resolution original and writes `destination`;
-// the format comes from its suffix. JPEG and WebP are written at quality 95.
-// Never throws; returns false and fills `error` instead.
+struct ExportOptions {
+    // Target pixel size; invalid = the recipe's own output size.
+    QSize size;
+    // Fill: scale to cover, centre-crop. FitBlur: scale to fit over a
+    // blurred, darkened fill (vertical Shorts from landscape photos).
+    // FitPad: scale to fit on `padColor`.
+    enum Fit { Fill, FitBlur, FitPad } fit = Fill;
+    QString padColor = QStringLiteral("080a0d");
+    int quality = 0;  // JPEG / WebP / AVIF quality; 0 = 95
+};
+
+// Renders the recipe on the full-resolution original, resizes per `options`
+// and writes `destination`; the format comes from its suffix (jpg, png,
+// webp, avif, tif). Never throws; returns false and fills `error` instead.
+bool exportImage(const QString &source, const EditRecipe &recipe, const QString &destination,
+                 const ExportOptions &options, QString *error);
 bool exportImage(const QString &source, const EditRecipe &recipe, const QString &destination, QString *error);
 
 }  // namespace ImageEngine

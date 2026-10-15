@@ -1,5 +1,7 @@
 #include "imageengine.h"
 
+#include "fx.h"
+
 #include <QColor>
 #include <QFileInfo>
 #include <QMutex>
@@ -356,11 +358,16 @@ VImage applyDetail(VImage display, const EditRecipe &r, double scale) {
 
 // Everything after geometry. Alpha is split off and rejoined; the result has
 // the input's format and interpretation, clipped (never wrapped).
-VImage applyAdjustments(const VImage &image, const EditRecipe &r, double scale) {
+VImage applyAdjustments(VImage image, const EditRecipe &r, double scale) {
     const bool lut = lightActive(r) || toneActive(r);
     const bool saturation = r.saturation != 100 || r.vibrance != 0;
     const bool hsl = hslActive(r), detail = detailActive(r);
-    if (!lut && !saturation && !hsl && !detail) return image;
+    const bool fx = r.hasFx(), text = !r.textLayers.isEmpty();
+    if (!lut && !saturation && !hsl && !detail && !fx && !text) return image;
+
+    // FX and text are colour: promote grey images once.
+    if ((fx || text) && image.bands() - (image.has_alpha() ? 1 : 0) < 3)
+        image = image.colourspace(image.format() == VIPS_FORMAT_USHORT ? VIPS_INTERPRETATION_RGB16 : VIPS_INTERPRETATION_sRGB);
 
     const bool alpha = image.has_alpha();
     const int colourBands = alpha ? image.bands() - 1 : image.bands();
@@ -375,11 +382,14 @@ VImage applyAdjustments(const VImage &image, const EditRecipe &r, double scale) 
     else u16 = sixteen ? colour : colour.cast(VIPS_FORMAT_USHORT) * 257;
 
     // 2-3. Colour and detail on 0..1 floats, only if needed.
-    if (((saturation || hsl) && rgb) || detail) {
+    if (((saturation || hsl) && rgb) || detail || fx || text) {
         VImage d = u16.cast(VIPS_FORMAT_FLOAT) / 65535.0;
         if (saturation && rgb) d = applySaturation(d, r);
         if (hsl && rgb) d = applyHsl(d, r);
         if (detail) d = applyDetail(d, r, scale);
+        // 4. Cyber FX, then text layers (whole frame; see Fx).
+        if (fx) d = Fx::apply(clamp01(d), r, scale);
+        if (text) d = Fx::applyText(clamp01(d), r.textLayers);
         u16 = (clamp01(d) * 65535.0 + 0.5).cast(VIPS_FORMAT_USHORT);
     }
 
@@ -433,7 +443,9 @@ QSize geometryFrame(QSize size, const EditRecipe &r) {
 }
 
 VImage apply(const VImage &image, const EditRecipe &r, const ApplyOptions &options) {
-    VImage out = applyGeometry(image, r);
+    VImage out = applyAdjustments(applyGeometry(image, r), r, options.scale);
+    // The region is cut last: effects depend on the whole frame, and libvips
+    // only computes the pixels (plus filter margins) the region needs.
     if (options.region.isValid()) {
         const int w = out.width(), h = out.height();
         const int x = qBound(0, int(std::floor(options.region.x() * w)), w - 1);
@@ -442,7 +454,7 @@ VImage apply(const VImage &image, const EditRecipe &r, const ApplyOptions &optio
         const int rh = qBound(1, int(std::ceil(options.region.height() * h)), h - y);
         out = out.extract_area(x, y, rw, rh);
     }
-    return applyAdjustments(out, r, options.scale);
+    return out;
 }
 
 double curveValue(const QList<QPointF> &points, double x) { return MonotoneCurve(points).value(x); }
@@ -515,12 +527,48 @@ QImage histogramImage(const VImage &image, QSize size) {
     return out;
 }
 
+VImage fitToSize(const VImage &image, const ExportOptions &o) {
+    if (!o.size.isValid() || o.size.isEmpty()) return image;
+    const int tw = o.size.width(), th = o.size.height();
+    const double sx = double(tw) / image.width(), sy = double(th) / image.height();
+    auto scaled = [&](double s) { return image.resize(s, VImage::option()->set("kernel", VIPS_KERNEL_LANCZOS3)); };
+    auto centreCrop = [&](const VImage &big) {
+        return big.extract_area(std::max(0, (big.width() - tw) / 2), std::max(0, (big.height() - th) / 2),
+                                std::min(tw, big.width()), std::min(th, big.height()));
+    };
+    if (o.fit == ExportOptions::Fill) return centreCrop(scaled(std::max(sx, sy)));
+    const VImage front = scaled(std::min(sx, sy));
+    const int left = (tw - front.width()) / 2, top = (th - front.height()) / 2;
+    if (o.fit == ExportOptions::FitPad) {
+        const QColor c("#" + o.padColor);
+        std::vector<double> background{double(c.red()), double(c.green()), double(c.blue())};
+        if (image.format() == VIPS_FORMAT_USHORT) for (auto &v : background) v *= 257;
+        if (image.has_alpha()) background.push_back(image.format() == VIPS_FORMAT_USHORT ? 65535 : 255);
+        background.resize(size_t(image.bands()), background.back());
+        return front.embed(left, top, tw, th, VImage::option()->set("extend", VIPS_EXTEND_BACKGROUND)->set("background", background));
+    }
+    // FitBlur: the frame filled with a blurred, darkened copy (vertical
+    // Shorts from landscape photos without black bars).
+    VImage back = centreCrop(scaled(std::max(sx, sy)));
+    const VipsBandFormat format = back.format();
+    back = (back.gaussblur(std::max(8.0, tw / 40.0)) * 0.55).cast(format);
+    return back.insert(front, left, top);
+}
+
 bool exportImage(const QString &source, const EditRecipe &recipe, const QString &destination, QString *error) {
+    return exportImage(source, recipe, destination, ExportOptions{}, error);
+}
+
+bool exportImage(const QString &source, const EditRecipe &recipe, const QString &destination,
+                 const ExportOptions &exportOptions, QString *error) {
     try {
-        VImage out = apply(loadOriginal(source), recipe);
+        VImage out = fitToSize(apply(loadOriginal(source), recipe), exportOptions);
         const QString suffix = QFileInfo(destination).suffix().toLower();
+        if ((suffix == "jpg" || suffix == "jpeg") && out.has_alpha()) out = out.flatten();
         vips::VOption *options = VImage::option();
-        if (suffix == "jpg" || suffix == "jpeg" || suffix == "webp") options->set("Q", 95);
+        const int quality = exportOptions.quality > 0 ? exportOptions.quality : 95;
+        if (suffix == "jpg" || suffix == "jpeg" || suffix == "webp" || suffix == "avif" || suffix == "heic")
+            options->set("Q", quality);
         out.write_to_file(destination.toUtf8().constData(), options);
         return true;
     } catch (const vips::VError &e) {

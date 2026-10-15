@@ -24,6 +24,13 @@ The current client foundation includes:
   - 📐 **Geometry:** rotate, flip, straighten, perspective, and crop with aspect presets.
   - 📊 **Tools:** a live histogram, clipping warnings, a before/after split, true 1:1 zoom and a clickable history.
   - ⚡ Sliders preview live (a small draft while dragging, full quality when you let go), rendered off the UI thread.
+- ✨ **Cyber FX:**
+  - Effects: neon bloom, chromatic aberration, glitch, pixel sort, halftone, scanlines, film grain, vignette.
+  - **CYBERGRID gradient maps** built from the 81 Cybercore palettes (neon, sunset, acid, duotones…).
+  - `.cube` **LUTs**.
+  - **Text & watermark layers** in JetBrains Mono with neon glow.
+- 🎭 **Looks:** 9 built-in Cybercore looks (Neon Noir, Neon Coffin, Blackbox Terminal, Synthwave Sunset, Cyberdyne Red, Ghost Signal, Halftone Zine, Chrome Drip, Faded Polaroid) plus your own. One click styles a photo and keeps its crop and text.
+- 📤 **Export presets:** YouTube Shorts 9:16 (fill, or fit over a blurred background), 16:9 thumbnail, square, web. Formats are JPG, PNG, WebP and AVIF, with adjustable quality.
 - ↩️ Undo / redo for every edit, with a labelled history list. A slider drag counts as one step.
 - 📜 **Edit recipes:** every edit is a versioned JSON recipe, rendered identically for preview and export, saved with the export, and **remembered per photo**. Reopen a photo (or move to it with `[` / `]`) and your edit is still there.
 - 🧬 Cybermeta sidecars: each export gets an XMP file containing title, caption, tags, source identity, and the full edit recipe (`cybermeta:recipe`). The image and metadata stay portable outside Ghostframe.
@@ -60,6 +67,12 @@ src/editrecipe.*      Versioned JSON edit recipe (one table drives JSON,
                       QML keys and clamping)
 src/edithistory.*     Labelled undo/redo over recipe states
 src/recipestore.*     Per-photo remembered edits (<AppData>/recipes/*.json)
+src/fx.*              Cyber FX + text layers (whole-frame, seeded, scale-aware)
+src/cubelut.*         .cube 3D LUT parser/applier and the LUT library
+src/cybergrid.*       CYBERGRID palette catalog + gradient styles (QML: cybergrid)
+src/looklibrary.*     Built-in and user looks
+assets/cybergrid/     81 palettes synced from cybercore (tools/sync-cybergrid.sh)
+assets/looks/         Built-in looks (JSON recipe fragments)
 src/previewprovider.h image://ghostframe-edit/{preview,before,histogram,zoom}
                       frames for QML (no temp files)
 tests/                Qt Test suite (engine, recipe, history, store,
@@ -74,6 +87,10 @@ tests/                Qt Test suite (engine, recipe, history, store,
 2. **Light + tone:** white balance and exposure (in linear light), levels, blacks/whites, shadows/highlights, brightness/contrast and curves. These are all per-channel, so they become **one lookup table** applied directly to the 8- or 16-bit pixels, with 16-bit output.
 3. **Colour:** vibrance and saturation as luminance blends (a single 3×3 matrix when vibrance is off), then HSL bands in LCh.
 4. **Detail:** colour noise, edge-aware luminance noise, then unsharp-mask sharpening. Radii scale with the preview size, so preview and export match.
+5. **Cyber FX:** gradient map → LUT → bloom → chromatic aberration → glitch → pixel sort → halftone → scanlines → grain → vignette. Positions are fractions of the frame and random effects use fixed seeds, so preview, 1:1 zoom and export match.
+6. **Text layers**, last. Sizes and margins are fractions of the output height, so they hold at any export size.
+
+1:1 zoom cuts its region *after* the whole pipeline. Effects depend on the full frame, and libvips computes only the pixels the region needs (plus filter margins).
 
 The interface talks to PhotoPrism's documented API. PhotoPrism keeps responsibility for indexing and AI; Ghostframe focuses on browsing. This keeps the app independent of PhotoPrism's internal database and makes it easier to track upstream changes.
 
@@ -90,6 +107,8 @@ This initial design is **self-hosted, not end-to-end encrypted**. PhotoPrism nee
 - A reachable PhotoPrism server. The default local address is `http://127.0.0.1:2342`.
 - A PhotoPrism app password with photo read access. Ghostframe stores it in an owner-only local file for automatic reconnects.
 - ⚡ libvips 8.15 or newer with its C++ binding (`libvips` on Arch; `pkg-config vips-cpp` must work) for the editor. ImageMagick is no longer required.
+- 🔤 Pango (pulled in by libvips) and the JetBrains Mono font (`ttf-jetbrains-mono`) for text layers; other installed fonts work too.
+- 🖼️ For AVIF export, libheif with an AV1 encoder (Arch's `libheif` includes one).
 
 ## 🚀 Build and run
 
@@ -109,7 +128,7 @@ qmake6 && make -j"$(nproc)"
 QT_QPA_PLATFORM=offscreen ./tst_ghostframe
 ```
 
-The suite (37 cases) generates its fixture images at runtime and runs in Qt's test mode, so it never touches your real settings or remembered edits. It covers:
+The suite (51 cases) generates its fixture images at runtime and runs in Qt's test mode, so it never touches your real settings or remembered edits. It covers:
 
 - the recipe format (every parameter round-trips, unknown ops are ignored, values clamp);
 - curve and tone monotonicity;
@@ -124,6 +143,21 @@ The suite (37 cases) generates its fixture images at runtime and runs in Qt's te
 - 16-bit input staying 16-bit;
 - the recipe store;
 - brightness/contrast pixel values checked against ImageMagick 7.1;
+- Phase 2: FX recipe round trip and hostile-input clean-up;
+- looks keeping geometry and text;
+- gradient map stops;
+- `.cube` parsing (and errors) and LUT rendering;
+- bloom, vignette, scanlines, aberration and halftone doing what they say;
+- aberration at many odd frame sizes (a regression test);
+- seeded effects repeating exactly;
+- pixel sort ordering;
+- text landing in its anchor;
+- zoom regions matching full renders with FX;
+- grey images becoming colour for FX;
+- every export preset and format, including AVIF;
+- CYBERGRID with a custom theme;
+- built-in and user looks;
+- an editor session with a look, text layers and a Shorts WebP export;
 - two full editor sessions (draft → full render, labelled history, history jumps, before frame, 1:1 zoom and pan clamping, export + XMP, edits restored on reopen);
 - a speed check.
 
@@ -142,6 +176,12 @@ Open a photo from the library and choose **✎ EDIT IMAGE**. Ghostframe download
 - 🌈 **HSL:** pick one of 8 colour bands, then shift its hue, saturation and luminance. Edited bands get a marker.
 - 🔬 **Detail:** sharpen amount/radius/threshold, luminance and colour noise reduction. Check them at 1:1.
 - 🕘 **History:** every step is labelled (e.g. "Exposure", "Crop", "Blue saturation"). Click one to jump there.
+- 🎭 **Looks:** click a look to apply it. Your crop, geometry and text stay. **SAVE LOOK** stores the current style (everything except geometry and text) under a name. Your looks are lime, built-ins cyan.
+- 🌈 **CYBERGRID gradient:** pick a Cybercore palette (your desktop's active one is preselected) and a style: NEON, SUNSET, ACID, DUO PINK, DUO CYAN or MONO. **APPLY GRADIENT** maps the image's brightness onto those colours; set the strength with **GRADIENT AMOUNT**. Custom themes in `~/.config/cybercore/themes/` show up too.
+- ✨ **FX:** neon bloom (threshold, radius), chromatic aberration, glitch (with ↻ RESEED), pixel sort (rows or columns), halftone (dot size), scanlines (spacing), film grain (size), vignette (midpoint).
+- 🎞️ **LUT:** **IMPORT .CUBE** copies a 3D LUT into `~/.local/share/Cybercore Systems/Ghostframe/luts/`. Pick one and set its strength. A missing LUT renders as "no LUT" with a warning.
+- 🔤 **Text & watermark:** **+ TEXT** or **+ WATERMARK** ("© NEON COFFIN VIDEO", small, bottom-right). Each layer has its text, colour swatches, bold, a 3×3 anchor grid, size, margin, opacity and neon glow.
+- 📤 **Export:** choose a size: ORIGINAL, SHORTS 9:16 (1080×1920), THUMB 16:9 (1280×720), SQUARE (1080) or WEB (long edge 2560, WebP). Sized presets can **FILL** (crop), **FIT + BLUR** (a blurred, darkened backdrop, great for Shorts from landscape photos) or **FIT + BARS**. Then pick AUTO, JPG, PNG, WEBP or AVIF and a quality. The file name includes the preset.
 - 🧰 **Toolbar:** ‹ › previous/next photo, **CROP**, **BEFORE** (drag the split), **CLIPPING** (pink = blown highlights, cyan = crushed shadows), **1:1** (real pixels, drag to pan), **UNDO** / **REDO**.
 - 💾 Edits are **remembered per photo** as you work, in `~/.local/share/Cybercore Systems/Ghostframe/recipes/`. Closing the editor or moving to another photo never loses them. **RESET ALL EDITS** (undoable) makes Ghostframe forget them.
 
@@ -238,15 +278,17 @@ The full phase-by-phase build plan lives in **[docs/ROADMAP.md](docs/ROADMAP.md)
 | 🖌️ | **5 · Local edits** | Masks, heal/clone, layers |
 | 🚀 | **6 · Shipping** | Live CYBERGRID theming, AUR package, project site |
 
-Already done ✅: the Qt Quick shell and PhotoPrism client, the Cybercore theme, authenticated search and thumbnails, the nested folder browser, keyring-free auto-reconnect, and **Phase 0 · Foundation** (component UI, libvips engine, recipes, undo/redo, tests) and **Phase 1 · Darkroom** (the full Image Lab above).
+Already done ✅: the Qt Quick shell and PhotoPrism client, the Cybercore theme, authenticated search and thumbnails, the nested folder browser, keyring-free auto-reconnect, and **Phase 0 · Foundation** (component UI, libvips engine, recipes, undo/redo, tests), **Phase 1 · Darkroom** (the full Image Lab above) and **Phase 2 · Cyber FX** (effects, CYBERGRID gradients, LUTs, text, looks, export presets).
 
 ## 🛠️ Development notes
 
 - 📁 Project entry point: `ghostframe.pro`. Core sources shared with the tests are listed in `ghostframe.pri`. See *Architecture* for the file map.
 - 🧩 New QML component: add the file to `qml/` **and** to `qml.qrc`. Use `Theme.*` for colors and fonts, never a local id named `palette` (`Item.palette` shadows it inside delegates).
 - 📜 New numeric edit parameter: add one row to the `kFields` table in `src/editrecipe.cpp` (QML key, JSON op/field, range, default), render it in `ImageEngine::apply`, add a `ParamSlider { key: … }` in `qml/Editor.qml` and a label in `ImageEditor::labelFor`, and add a test. Unknown ops are ignored when reading, so older Ghostframe builds can still open newer recipes.
-- ⏱️ Keep previews fast. In libvips, a 1-band image combined with a 3-band one is broadcast per pixel and costs about 5× a matrix op. Prefer `recomb`, lookup tables (`maplut`) and per-channel operations.
-- 🖼️ `GHOSTFRAME_EDIT=/path/to/image ./ghostframe` opens the editor on a local file without PhotoPrism. The file is never modified or deleted. Add `GHOSTFRAME_EDIT_VIEW=crop`, `before,clipping` or `zoom` to start in that view (handy with `GHOSTFRAME_GRAB`).
+- 🎭 New built-in look: add `assets/looks/<name>.json` (`{"name": …, "recipe": {"version": 1, "ops": [...]}}`) and list it in `looks.qrc`. The tests check that every built-in parses and does something.
+- 🌈 CYBERGRID palettes come from the cybercore repo. Refresh them with `tools/sync-cybergrid.sh`, which also regenerates `cybergrid.qrc`; don't edit `assets/cybergrid/` by hand.
+- ⏱️ Keep previews fast. Wide blurs (bloom, glow) run on a downscaled copy (`softBlur`); smooth masks (vignette) are computed small and enlarged. In libvips, a 1-band image combined with a 3-band one is broadcast per pixel and costs about 5× a matrix op. Prefer `recomb`, lookup tables (`maplut`) and per-channel operations.
+- 🖼️ `GHOSTFRAME_EDIT=/path/to/image ./ghostframe` opens the editor on a local file without PhotoPrism. The file is never modified or deleted. Add `GHOSTFRAME_EDIT_VIEW=crop`, `before,clipping`, `zoom` or `scroll=N` (scrolls the adjustment panel) to start in that view (handy with `GHOSTFRAME_GRAB`).
 - 📸 `GHOSTFRAME_GRAB=/tmp/shot.png[:ms]` saves a window screenshot after the delay and quits. Add `QT_QPA_PLATFORM=offscreen` for headless checks, and `QT_FORCE_STDERR_LOGGING=1` to see QML warnings.
 - 🔐 The PhotoPrism token is saved in an owner-only file under the per-user configuration directory. Do not commit secrets, photo samples, or local PhotoPrism configuration.
 

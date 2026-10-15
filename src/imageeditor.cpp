@@ -1,5 +1,6 @@
 #include "imageeditor.h"
 
+#include "cubelut.h"
 #include "imageengine.h"
 #include "previewprovider.h"
 
@@ -134,6 +135,13 @@ QString ImageEditor::labelFor(const QString &key) {
         {"levelsWhite", "Levels white"}, {"levelsGamma", "Levels gamma"}, {"vibrance", "Vibrance"},
         {"saturation", "Saturation"}, {"sharpenAmount", "Sharpen"}, {"sharpenRadius", "Sharpen radius"},
         {"sharpenThreshold", "Sharpen threshold"}, {"noiseLuminance", "Luminance noise"}, {"noiseColor", "Colour noise"},
+        {"gradientAmount", "Gradient map"}, {"lutAmount", "LUT strength"}, {"bloomAmount", "Bloom"},
+        {"bloomThreshold", "Bloom threshold"}, {"bloomRadius", "Bloom radius"}, {"aberrationAmount", "Chromatic aberration"},
+        {"glitchAmount", "Glitch"}, {"glitchSeed", "Glitch seed"}, {"pixelSortAmount", "Pixel sort"},
+        {"pixelSortVertical", "Pixel sort direction"}, {"halftoneAmount", "Halftone"}, {"halftoneSize", "Halftone size"},
+        {"scanlineAmount", "Scanlines"}, {"scanlineSpacing", "Scanline spacing"}, {"grainAmount", "Grain"},
+        {"grainSize", "Grain size"}, {"vignetteAmount", "Vignette"}, {"vignetteMidpoint", "Vignette midpoint"},
+        {"lutName", "LUT"}, {"gradientColors", "Gradient map"}, {"textLayers", "Text"},
         {"curve.master", "Curve"}, {"curve.red", "Red curve"}, {"curve.green", "Green curve"}, {"curve.blue", "Blue curve"},
     };
     if (labels.contains(key)) return labels.value(key);
@@ -218,6 +226,10 @@ void ImageEditor::schedulePreview() {
 void ImageEditor::startRender() {
     if (!m_ready) return;
     if (m_renderWatcher.isRunning()) { m_renderPending = true; return; }
+    if (!m_recipe.lutName.isEmpty()) {
+        QString error;
+        if (!LutLibrary::load(m_recipe.lutName, &error)) setStatus(error + " (rendering without it)");
+    }
     const int session = m_session;
     // An uncommitted change means a slider is moving: render the draft.
     const bool draft = m_recipe != m_history.current() && !m_draft.is_null();
@@ -472,6 +484,62 @@ void ImageEditor::cancel() {
     emit previewChanged(); emit sourceChanged(); emit zoomChanged();
 }
 
+QStringList ImageEditor::lutNames() const { return LutLibrary::names(); }
+QString ImageEditor::lutDirectory() const { return LutLibrary::directory(); }
+
+void ImageEditor::applyLook(const QString &name) {
+    const QJsonObject look = m_looks.recipe(name);
+    if (look.isEmpty()) { setStatus("Unknown look: " + name); return; }
+    setRecipe(m_recipe.withLook(look), true, "Look: " + name);
+}
+
+bool ImageEditor::saveLook(const QString &name) {
+    QString error;
+    if (!m_looks.save(name, m_recipe.lookJson(), &error)) { setStatus(error); return false; }
+    emit looksChanged();
+    setStatus("Saved look “" + name.trimmed() + "”.");
+    return true;
+}
+
+void ImageEditor::deleteLook(const QString &name) {
+    if (m_looks.remove(name)) emit looksChanged();
+}
+
+void ImageEditor::importLut(const QUrl &file) {
+    QString error;
+    const QString name = LutLibrary::import(file.toLocalFile(), &error);
+    if (name.isEmpty()) { setStatus("LUT not imported: " + error); return; }
+    emit lutsChanged();
+    applyParameter("lutName", name, "LUT: " + name);
+}
+
+void ImageEditor::addTextLayer(const QString &text) {
+    QVariantList layers = m_recipe.toVariantMap().value("textLayers").toList();
+    QVariantMap layer{{"text", text.isEmpty() ? QStringLiteral("GHOSTFRAME") : text}};
+    if (layers.size() >= 16) return;
+    layers.append(layer);
+    applyParameter("textLayers", layers, "Add text");
+}
+
+void ImageEditor::setTextLayer(int index, const QString &field, const QVariant &value, bool commit) {
+    QVariantList layers = m_recipe.toVariantMap().value("textLayers").toList();
+    if (index < 0 || index >= layers.size()) return;
+    QVariantMap layer = layers[index].toMap();
+    layer.insert(field, value);
+    layers[index] = layer;
+    EditRecipe r = m_recipe;
+    r.setParameter("textLayers", layers);
+    m_lastLabel = "Text " + field;
+    setRecipe(r, commit, m_lastLabel);
+}
+
+void ImageEditor::removeTextLayer(int index) {
+    QVariantList layers = m_recipe.toVariantMap().value("textLayers").toList();
+    if (index < 0 || index >= layers.size()) return;
+    layers.removeAt(index);
+    applyParameter("textLayers", layers, "Remove text");
+}
+
 bool ImageEditor::writeCybermeta(const QString &path, const QString &title, const QString &caption, const QString &tags) const {
     QSaveFile file(path + ".xmp");
     if (!file.open(QIODevice::WriteOnly)) return false;
@@ -510,7 +578,7 @@ bool ImageEditor::writeCybermeta(const QString &path, const QString &title, cons
     return file.commit();
 }
 
-void ImageEditor::save(const QString &title, const QString &caption, const QString &tags) {
+void ImageEditor::save(const QString &title, const QString &caption, const QString &tags, const QVariantMap &exportOptions) {
     // A cancelled export may still be finishing; let it clean up first.
     if (!m_ready || m_busy || m_exportWatcher.isRunning()) return;
     commitEdit();
@@ -521,9 +589,20 @@ void ImageEditor::save(const QString &title, const QString &caption, const QStri
     stem.replace(QRegularExpression("[^A-Za-z0-9_-]+"), "-");
     const QString timestamp = QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss");
     const QString extension = QFileInfo(m_originalName).suffix().toLower();
-    const QString format = (extension == "png" || extension == "webp" || extension == "tif" || extension == "tiff") ? extension : "jpg";
+    QString format = (extension == "png" || extension == "webp" || extension == "tif" || extension == "tiff") ? extension : "jpg";
+    const QString requested = exportOptions.value("format").toString().toLower();
+    if (QStringList{"jpg", "png", "webp", "avif", "tif"}.contains(requested)) format = requested;
+    ImageEngine::ExportOptions options;
+    const int width = exportOptions.value("width").toInt(), height = exportOptions.value("height").toInt();
+    if (width > 0 && height > 0) options.size = QSize(qMin(width, 16384), qMin(height, 16384));
+    const QString fit = exportOptions.value("fit").toString();
+    options.fit = fit == "blur" ? ImageEngine::ExportOptions::FitBlur : fit == "pad" ? ImageEngine::ExportOptions::FitPad
+                                                                                    : ImageEngine::ExportOptions::Fill;
+    options.quality = qBound(0, exportOptions.value("quality").toInt(), 100);
+    QString preset = exportOptions.value("preset").toString().toLower();
+    preset.replace(QRegularExpression("[^a-z0-9]+"), "-");
     const QString unique = QUuid::createUuid().toString(QUuid::WithoutBraces).left(8);
-    const QString name = stem + "-Ghostframe-" + timestamp + "-" + unique;
+    const QString name = stem + "-Ghostframe-" + (preset.isEmpty() ? QString() : preset + "-") + timestamp + "-" + unique;
     const QString path = base + "/" + name + "." + format;
     const QString stagingPath = base + "/." + name + "-working." + format;
 
@@ -534,12 +613,12 @@ void ImageEditor::save(const QString &title, const QString &caption, const QStri
     const int session = m_session;
     const QString source = m_sourcePath;
     const EditRecipe recipe = m_recipe;
-    m_exportWatcher.setFuture(QtConcurrent::run([session, source, recipe, stagingPath, path] {
+    m_exportWatcher.setFuture(QtConcurrent::run([session, source, recipe, stagingPath, path, options] {
         ExportResult result;
         result.session = session;
         result.stagingPath = stagingPath;
         result.path = path;
-        result.ok = ImageEngine::exportImage(source, recipe, stagingPath, &result.error)
+        result.ok = ImageEngine::exportImage(source, recipe, stagingPath, options, &result.error)
                     && QFileInfo(stagingPath).size() > 0;
         return result;
     }));

@@ -1,0 +1,1 @@
+{"name":"Cyberdyne Red","recipe":{"version":1,"ops":[{"op":"brightnessContrast","brightness":0,"contrast":20},{"op":"gradientMap","amount":60,"name":"Cyberdyne","colors":["010101","330000","bb0000","ff4d4d","e6e6e6"]},{"op":"glitch","amount":20,"seed":3},{"op":"grain","amount":15,"size":1.5}]}}

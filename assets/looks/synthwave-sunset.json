@@ -1,0 +1,1 @@
+{"name":"Synthwave Sunset","recipe":{"version":1,"ops":[{"op":"whiteBalance","temperature":20,"tint":12},{"op":"gradientMap","amount":55,"name":"Synthwave","colors":["0d0221","541388","f0386b","ff8e3c","fff1c1"]},{"op":"bloom","amount":35,"threshold":60,"radius":30},{"op":"scanlines","amount":22,"spacing":4},{"op":"vignette","amount":-30,"midpoint":50}]}}

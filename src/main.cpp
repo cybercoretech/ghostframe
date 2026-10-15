@@ -1,5 +1,6 @@
 #include "photoservice.h"
 #include "imageeditor.h"
+#include "cybergrid.h"
 #include "imageengine.h"
 #include "previewprovider.h"
 
@@ -26,6 +27,8 @@ int main(int argc, char *argv[]) {
 
     PhotoService photos;
     ImageEditor imageEditor;
+    CyberGrid cybergrid;
+    // Declared after everything QML uses, so it is destroyed first.
     QQmlApplicationEngine engine;
     auto *previewProvider = new PreviewProvider;  // owned by the engine
     engine.addImageProvider("ghostframe-edit", previewProvider);
@@ -35,6 +38,7 @@ int main(int argc, char *argv[]) {
     });
     engine.rootContext()->setContextProperty("photoService", &photos);
     engine.rootContext()->setContextProperty("imageEditor", &imageEditor);
+    engine.rootContext()->setContextProperty("cybergrid", &cybergrid);
     const QUrl mainUrl(QStringLiteral("qrc:/qml/Main.qml"));
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreated, &app,
                      [mainUrl](QObject *object, const QUrl &url) {
@@ -48,16 +52,24 @@ int main(int argc, char *argv[]) {
     if (!editPath.isEmpty() && !engine.rootObjects().isEmpty()) {
         engine.rootObjects().first()->setProperty("showEditor", true);
         imageEditor.openLocalFile(editPath);
-        // GHOSTFRAME_EDIT_VIEW=crop | before,clipping | zoom: start in that view
+        // GHOSTFRAME_EDIT_VIEW=crop | before,clipping | zoom | scroll=N: start in that view
         // once the image is ready (for headless screenshots of each mode).
         const QStringList view = qEnvironmentVariable("GHOSTFRAME_EDIT_VIEW").split(',', Qt::SkipEmptyParts);
         if (!view.isEmpty()) {
-            QObject::connect(&imageEditor, &ImageEditor::readyChanged, &imageEditor, [&imageEditor, view] {
+            QObject::connect(&imageEditor, &ImageEditor::readyChanged, &imageEditor, [&imageEditor, &engine, view] {
                 if (!imageEditor.ready()) return;
                 if (view.contains("before")) imageEditor.setShowBefore(true);
                 if (view.contains("clipping")) imageEditor.setShowClipping(true);
                 if (view.contains("crop")) imageEditor.setCropMode(true);
                 if (view.contains("zoom")) imageEditor.setZoom(true, 0.5, 0.5, 700, 560);
+                // scroll=N: scroll the adjustment panel down N pixels.
+                for (const QString &item : view) {
+                    if (!item.startsWith("scroll=")) continue;
+                    const double y = item.mid(7).toDouble();
+                    if (auto *panel = engine.rootObjects().first()->findChild<QObject *>("editorPanel"))
+                        if (auto *flick = panel->property("contentItem").value<QObject *>())
+                            QTimer::singleShot(500, flick, [flick, y] { flick->setProperty("contentY", y); });
+                }
             }, Qt::SingleShotConnection);
         }
     }

@@ -94,6 +94,19 @@ This is the build plan agreed on 2026-10-14. Each phase ships as **one pull requ
 - 🔤 Text and watermark layers (JetBrains Mono, theme colors).
 - 📐 **Export presets:** YouTube Shorts 1080×1920, thumbnail 1280×720, square 1080, and web WebP/AVIF at chosen quality. Made for Neon Coffin Video work.
 
+> ✅ **Delivered (2026-10-14):**
+> - All effects listed above.
+> - CYBERGRID gradient maps from the 81 bundled palettes (synced by `tools/sync-cybergrid.sh`) plus custom themes, in 6 styles.
+> - `.cube` LUT import and library.
+> - Text/watermark layers with anchors and neon glow.
+> - 9 built-in looks plus save/delete for your own.
+> - Export presets with fill / fit+blur / fit+bars and JPG/PNG/WebP/AVIF.
+> - 51 tests.
+>
+> **Changes from the plan:**
+> - Duotones are styles of the gradient map (DUO PINK / DUO CYAN) rather than a separate op.
+> - 1:1 zoom now cuts its region after the whole pipeline, so FX stay exact.
+
 ## 🧬 Phase 3: Cybermeta integration
 
 - 🪪 **Metadata panel** in the viewer: camera, lens, exposure, dates, GPS (with a map link), from `cybermeta show <file> --format json`.
@@ -130,8 +143,8 @@ This is the build plan agreed on 2026-10-14. Each phase ships as **one pull requ
 |---|---|---|
 | 0 · Foundation | ✅ done | #5 |
 | 1 · Darkroom | ✅ done | #6 |
-| 2 · Cyber FX | ⏳ next | — |
-| 3 · Cybermeta | 🕓 planned | — |
+| 2 · Cyber FX | ✅ done | #7 |
+| 3 · Cybermeta | ⏳ next | — |
 | 4 · Library | 🕓 planned | — |
 | 5 · Local edits | 🕓 planned | — |
 | 6 · Shipping | 🕓 planned | — |

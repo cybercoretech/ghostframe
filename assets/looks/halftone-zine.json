@@ -1,0 +1,1 @@
+{"name":"Halftone Zine","recipe":{"version":1,"ops":[{"op":"brightnessContrast","brightness":0,"contrast":25},{"op":"vibrance","amount":-20},{"op":"halftone","amount":75,"size":10}]}}

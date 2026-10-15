@@ -25,3 +25,4 @@ deploy/originals/
 /tests/moc_predefs.h
 /tests/*.moc
 /tests/target_wrapper.sh
+/tests/qrc_*.cpp

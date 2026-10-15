@@ -1,0 +1,1 @@
+{"name":"Ghost Signal","recipe":{"version":1,"ops":[{"op":"brightnessContrast","brightness":0,"contrast":15},{"op":"saturation","percent":30},{"op":"chromaticAberration","amount":45},{"op":"glitch","amount":45,"seed":7},{"op":"scanlines","amount":30,"spacing":3},{"op":"grain","amount":30,"size":1.6}]}}
