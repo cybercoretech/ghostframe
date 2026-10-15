@@ -5,6 +5,8 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QDebug>
+#include <QQuickWindow>
+#include <QTimer>
 #include <QtQuickControls2/QQuickStyle>
 
 int main(int argc, char *argv[]) {
@@ -28,5 +30,20 @@ int main(int argc, char *argv[]) {
         if (!object && url == mainUrl) QCoreApplication::exit(1);
     });
     engine.load(mainUrl);
+
+    // Development aid: GHOSTFRAME_GRAB=/path.png[:ms] saves a screenshot of the
+    // window after the delay (default 6000 ms) and quits. Works offscreen.
+    const QString grab = qEnvironmentVariable("GHOSTFRAME_GRAB");
+    if (!grab.isEmpty() && !engine.rootObjects().isEmpty()) {
+        const qsizetype colon = grab.lastIndexOf(':');
+        bool ok = false;
+        const int delay = colon > 0 ? grab.mid(colon + 1).toInt(&ok) : 0;
+        const QString path = ok ? grab.left(colon) : grab;
+        auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+        QTimer::singleShot(ok ? delay : 6000, &app, [window, path] {
+            if (window) window->grabWindow().save(path);
+            QCoreApplication::quit();
+        });
+    }
     return app.exec();
 }
