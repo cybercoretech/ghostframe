@@ -3,6 +3,7 @@
 #include "editrecipe.h"
 
 #include <QImage>
+#include <QRectF>
 #include <QSize>
 #include <QString>
 
@@ -30,11 +31,41 @@ vips::VImage loadOriginal(const QString &path);
 // very large files.
 vips::VImage loadProxy(const QString &path, QSize maxSize = {1600, 1200});
 
-// Runs a recipe. Works at any scale because crop is normalised.
-vips::VImage apply(const vips::VImage &image, const EditRecipe &recipe);
+struct ApplyOptions {
+    // Image pixels per full-resolution pixel (e.g. proxy width / original
+    // width). Scales pixel radii (sharpen, noise reduction) so a preview
+    // looks like the export.
+    double scale = 1.0;
+    // If valid: only this part of the output frame (0..1, after crop) is
+    // rendered. Used by 1:1 zoom.
+    QRectF region;
+};
+
+// Runs a recipe. Geometry is resolution-independent (normalised), so this
+// works on the proxy and the original alike.
+vips::VImage apply(const vips::VImage &image, const EditRecipe &recipe, const ApplyOptions &options = {});
+
+// Size of the frame after rotate/flip/straighten/perspective but before crop,
+// for an input of `size`. Crop rectangles are fractions of this frame.
+QSize geometryFrame(QSize size, const EditRecipe &recipe);
+
+// The per-channel tone curve (levels, blacks/whites, shadows/highlights,
+// brightness/contrast, curves) at x in 0..1. channel 0..2 = R, G, B.
+double toneValue(const EditRecipe &recipe, int channel, double x);
+
+// Monotone cubic (Fritsch–Carlson) interpolation through sorted points:
+// no overshoot, so a curve never inverts tones. Empty = identity.
+double curveValue(const QList<QPointF> &points, double x);
 
 // 8-bit sRGB QImage (RGB888 or RGBA8888) for display.
 QImage toQImage(const vips::VImage &image);
+
+// Paints clipped pixels: any channel at 255 → pink, all channels at 0 → cyan.
+vips::VImage clippingOverlay(const vips::VImage &image);
+
+// RGB + luminance histogram of a display image, drawn into a width×height
+// QImage in Cybercore colours.
+QImage histogramImage(const vips::VImage &image, QSize size = {256, 90});
 
 // Renders the recipe on the full-resolution original and writes `destination`;
 // the format comes from its suffix. JPEG and WebP are written at quality 95.

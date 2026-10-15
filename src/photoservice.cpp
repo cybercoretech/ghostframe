@@ -368,3 +368,16 @@ void PhotoService::disconnectFromServer() {
     emit selectedFolderChanged();
     setStatus("Enter your PhotoPrism server details to connect.");
 }
+
+QVariantMap PhotoService::photoAt(int row) const {
+    if (row < 0 || row >= m_photos.size()) return {};
+    const Photo &p = m_photos.at(row);
+    return {{"title", p.title}, {"subtitle", p.subtitle}, {"source", p.full}, {"thumbnail", p.thumbnail},
+            {"hash", p.hash}, {"folder", p.folder}, {"originalName", p.originalName}, {"row", row}};
+}
+
+int PhotoService::rowOfHash(const QString &hash) const {
+    for (int i = 0; i < m_photos.size(); ++i)
+        if (m_photos.at(i).hash == hash) return i;
+    return -1;
+}

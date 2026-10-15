@@ -24,22 +24,46 @@ ApplicationWindow {
     // Single-key shortcuts must not fire while typing.
     readonly property bool typing: activeFocusItem instanceof TextInput
 
-    function closeEditor() { imageEditor.cancel(); showEditor = false }
+    function closeEditor() { imageEditor.commitEdit(); imageEditor.cancel(); showEditor = false }
+    // Esc / Q / ×: step out of crop or zoom first, then close the top layer.
     function closeCurrentLayer() {
-        if (showEditor) closeEditor()
+        if (showEditor && imageEditor.cropMode) imageEditor.cropMode = false
+        else if (showEditor && imageEditor.zoomed) imageEditor.setZoom(false, 0, 0, 0, 0)
+        else if (showEditor) closeEditor()
         else if (showSettings) showSettings = false
         else if (selectedPhoto !== null) selectedPhoto = null
         else Qt.quit()
     }
     function showLibrary() { showSettings = false; selectedPhoto = null; photoService.search("") }
     function notify(message) { saveNotice = message; noticeTimer.restart() }
+    // [ / ]: previous / next photo in the current view. In the editor the
+    // current edit is already remembered per photo, so nothing is lost.
+    function navigate(delta) {
+        if (selectedPhoto === null) return
+        const next = photoService.photoAt(photoService.rowOfHash(selectedPhoto.hash) + delta)
+        if (!next.hash) { notify(delta > 0 ? "Last photo in this view" : "First photo in this view"); return }
+        selectedPhoto = next
+        if (showEditor) {
+            imageEditor.commitEdit()
+            imageEditor.cancel()
+            photoService.downloadOriginal(next.hash, next.title, next.folder, next.originalName)
+        }
+    }
 
     Shortcut { sequence: "Ctrl+K"; onActivated: header.focusSearch() }
     Shortcut { sequence: "Ctrl+R"; onActivated: photoService.search(header.searchText) }
-    Shortcut { sequence: "Escape"; onActivated: { if (root.showEditor) root.closeEditor(); else { root.selectedPhoto = null; root.showSettings = false } } }
+    Shortcut { sequence: "Escape"; onActivated: { if (root.showEditor || root.selectedPhoto !== null || root.showSettings) root.closeCurrentLayer() } }
     Shortcut { sequence: "Q"; enabled: !root.typing; onActivated: root.closeCurrentLayer() }
     Shortcut { sequences: [StandardKey.Undo]; enabled: root.showEditor && !root.typing; onActivated: imageEditor.undo() }
     Shortcut { sequences: [StandardKey.Redo, "Ctrl+Shift+Z"]; enabled: root.showEditor && !root.typing; onActivated: imageEditor.redo() }
+    // Image Lab tools.
+    Shortcut { sequence: "R"; enabled: root.showEditor && !root.typing && imageEditor.ready; onActivated: imageEditor.cropMode = !imageEditor.cropMode }
+    Shortcut { sequence: "Return"; enabled: root.showEditor && !root.typing && imageEditor.cropMode; onActivated: imageEditor.cropMode = false }
+    Shortcut { sequence: "\\"; enabled: root.showEditor && !root.typing && imageEditor.ready; onActivated: imageEditor.showBefore = !imageEditor.showBefore }
+    Shortcut { sequence: "J"; enabled: root.showEditor && !root.typing && imageEditor.ready; onActivated: imageEditor.showClipping = !imageEditor.showClipping }
+    Shortcut { sequence: "Z"; enabled: root.showEditor && !root.typing && imageEditor.ready && !imageEditor.cropMode; onActivated: editor.stage.toggleZoom() }
+    Shortcut { sequence: "["; enabled: (root.showEditor || root.selectedPhoto !== null) && !root.typing; onActivated: root.navigate(-1) }
+    Shortcut { sequence: "]"; enabled: (root.showEditor || root.selectedPhoto !== null) && !root.typing; onActivated: root.navigate(1) }
 
     Connections {
         target: photoService
@@ -110,9 +134,11 @@ ApplicationWindow {
                     onEditRequested: photoService.downloadOriginal(root.selectedPhoto.hash, root.selectedPhoto.title, root.selectedPhoto.folder, root.selectedPhoto.originalName)
                 }
                 Editor {
+                    id: editor
                     anchors.fill: parent; z: 5
                     visible: root.showEditor
                     onCloseRequested: root.closeEditor()
+                    onNavigateRequested: (delta) => root.navigate(delta)
                 }
             }
         }

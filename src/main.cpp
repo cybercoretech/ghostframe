@@ -48,6 +48,18 @@ int main(int argc, char *argv[]) {
     if (!editPath.isEmpty() && !engine.rootObjects().isEmpty()) {
         engine.rootObjects().first()->setProperty("showEditor", true);
         imageEditor.openLocalFile(editPath);
+        // GHOSTFRAME_EDIT_VIEW=crop | before,clipping | zoom: start in that view
+        // once the image is ready (for headless screenshots of each mode).
+        const QStringList view = qEnvironmentVariable("GHOSTFRAME_EDIT_VIEW").split(',', Qt::SkipEmptyParts);
+        if (!view.isEmpty()) {
+            QObject::connect(&imageEditor, &ImageEditor::readyChanged, &imageEditor, [&imageEditor, view] {
+                if (!imageEditor.ready()) return;
+                if (view.contains("before")) imageEditor.setShowBefore(true);
+                if (view.contains("clipping")) imageEditor.setShowClipping(true);
+                if (view.contains("crop")) imageEditor.setCropMode(true);
+                if (view.contains("zoom")) imageEditor.setZoom(true, 0.5, 0.5, 700, 560);
+            }, Qt::SingleShotConnection);
+        }
     }
 
     // Development aid: GHOSTFRAME_GRAB=/path.png[:ms] saves a screenshot of the

@@ -4,7 +4,7 @@
 
 This is the build plan agreed on 2026-10-14. Each phase ships as **one pull request**, and PRs are not stacked: a phase starts from `main` after the previous one merges. Every phase PR also updates this file, the README, the Wiki page (`~/Wiki/src/desktop/ghostframe.md`) and the Blackbox Notes project note.
 
-> ⚡ **Order:** Phase 0 ✅ → Phase 1 first (make the editor feel great), then Cyber FX, Cybermeta, library features, local edits, packaging.
+> ⚡ **Order:** Phase 0 ✅ → Phase 1 ✅ first (make the editor feel great), then Cyber FX, Cybermeta, library features, local edits, packaging.
 
 ---
 
@@ -71,6 +71,21 @@ This is the build plan agreed on 2026-10-14. Each phase ships as **one pull requ
 
 **Done when:** a typical photo can be fully graded in Ghostframe and exported, with the edit stored as a recipe that reopens editable.
 
+> ✅ **Delivered (2026-10-14):**
+> - Every control listed above.
+> - The 3:2 crop aspect was added.
+> - Light and tone are fused into one per-channel lookup table on the integer pixels.
+> - Saturation is a single colour matrix.
+> - Drags render an 800 px draft and full quality comes on release.
+> - Previews run about 7 ms for light/tone and about 150 ms with every stage active, on a 1600 px proxy.
+>
+> **Beyond the plan:**
+> - Per-photo **remembered edits** (`RecipeStore`), which makes `[` / `]` navigation lossless.
+> - **Crop mode**, which shows the whole frame with a movable, aspect-locked box.
+> - A labelled history.
+> - `GHOSTFRAME_EDIT_VIEW` for headless screenshots of each view.
+> - 37 tests.
+
 ## ✨ Phase 2: Cyber FX (signature looks)
 
 - 🌈 Neon bloom / glow, chromatic aberration, scanlines, glitch and pixel sort, film grain, vignette, halftone.
@@ -114,8 +129,8 @@ This is the build plan agreed on 2026-10-14. Each phase ships as **one pull requ
 | Phase | Status | PR |
 |---|---|---|
 | 0 · Foundation | ✅ done | #5 |
-| 1 · Darkroom | ⏳ next | — |
-| 2 · Cyber FX | 🕓 planned | — |
+| 1 · Darkroom | ✅ done | #6 |
+| 2 · Cyber FX | ⏳ next | — |
 | 3 · Cybermeta | 🕓 planned | — |
 | 4 · Library | 🕓 planned | — |
 | 5 · Local edits | 🕓 planned | — |
