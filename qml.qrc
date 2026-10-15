@@ -1,15 +1,19 @@
 <RCC>
     <qresource prefix="/qml">
-        <file alias="AdjustSlider.qml">qml/AdjustSlider.qml</file>
         <file alias="ConnectionPanel.qml">qml/ConnectionPanel.qml</file>
+        <file alias="CurveEditor.qml">qml/CurveEditor.qml</file>
         <file alias="Editor.qml">qml/Editor.qml</file>
         <file alias="EditorButton.qml">qml/EditorButton.qml</file>
+        <file alias="EditorStage.qml">qml/EditorStage.qml</file>
         <file alias="Header.qml">qml/Header.qml</file>
         <file alias="HeaderButton.qml">qml/HeaderButton.qml</file>
+        <file alias="HslPanel.qml">qml/HslPanel.qml</file>
         <file alias="Main.qml">qml/Main.qml</file>
         <file alias="MetaField.qml">qml/MetaField.qml</file>
+        <file alias="ParamSlider.qml">qml/ParamSlider.qml</file>
         <file alias="PhotoCard.qml">qml/PhotoCard.qml</file>
         <file alias="PhotoGrid.qml">qml/PhotoGrid.qml</file>
+        <file alias="Section.qml">qml/Section.qml</file>
         <file alias="SideItem.qml">qml/SideItem.qml</file>
         <file alias="Sidebar.qml">qml/Sidebar.qml</file>
         <file alias="StatusBar.qml">qml/StatusBar.qml</file>

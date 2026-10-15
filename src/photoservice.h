@@ -34,6 +34,10 @@ public:
     Q_INVOKABLE void refreshFolders();
     Q_INVOKABLE void downloadOriginal(const QString &hash, const QString &title, const QString &folder, const QString &originalName);
     Q_INVOKABLE void loadMore();
+    // The photo at `row` as a map (title, subtitle, source, thumbnail, hash,
+    // folder, originalName, row); empty if out of range. For [ / ] navigation.
+    Q_INVOKABLE QVariantMap photoAt(int row) const;
+    Q_INVOKABLE int rowOfHash(const QString &hash) const;
     Q_INVOKABLE void disconnectFromServer();
 
 signals:

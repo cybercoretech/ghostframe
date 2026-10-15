@@ -10,6 +10,7 @@ Item {
     required property string hash
     required property string folder
     required property string originalName
+    required property int index
     signal opened(var photo)
 
     Rectangle {
@@ -41,7 +42,7 @@ Item {
         MouseArea {
             id: mouse
             anchors.fill: parent; hoverEnabled: true
-            onClicked: card.opened({ title: card.title, subtitle: card.subtitle, source: card.fullImage, hash: card.hash, folder: card.folder, originalName: card.originalName })
+            onClicked: card.opened(photoService.photoAt(card.index))
         }
     }
 }

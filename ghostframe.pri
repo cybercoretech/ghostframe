@@ -2,12 +2,14 @@
 INCLUDEPATH += $$PWD/src
 CONFIG += c++20 link_pkgconfig
 PKGCONFIG += vips-cpp
-QT += concurrent
+QT += concurrent gui
 
 SOURCES += $$PWD/src/editrecipe.cpp \
            $$PWD/src/edithistory.cpp \
-           $$PWD/src/imageengine.cpp
+           $$PWD/src/imageengine.cpp \
+           $$PWD/src/recipestore.cpp
 
 HEADERS += $$PWD/src/editrecipe.h \
            $$PWD/src/edithistory.h \
-           $$PWD/src/imageengine.h
+           $$PWD/src/imageengine.h \
+           $$PWD/src/recipestore.h
