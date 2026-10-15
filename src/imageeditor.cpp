@@ -1,23 +1,88 @@
 #include "imageeditor.h"
 
+#include "imageengine.h"
+#include "previewprovider.h"
+
 #include <QDateTime>
 #include <QDir>
+#include <QElapsedTimer>
+#include <QFile>
 #include <QFileInfo>
-#include <QStandardPaths>
-#include <QXmlStreamWriter>
-#include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QStandardPaths>
 #include <QUuid>
-#include <QUrl>
-#include <QVariant>
+#include <QXmlStreamWriter>
+#include <QtConcurrent/QtConcurrentRun>
 
-ImageEditor::ImageEditor(QObject *parent) : QObject(parent) {
-    m_magick = QStandardPaths::findExecutable("magick");
-    if (m_magick.isEmpty()) m_magick = QStandardPaths::findExecutable("convert");
+ImageEditor::ImageEditor(QObject *parent)
+    : QObject(parent),
+      m_exportDir(QStandardPaths::writableLocation(QStandardPaths::PicturesLocation) + "/Ghostframe/Exports") {
+    // Coalesce bursts of slider events; rendering itself is off-thread.
     m_previewTimer.setSingleShot(true);
-    m_previewTimer.setInterval(180);
-    connect(&m_previewTimer, &QTimer::timeout, this, &ImageEditor::updatePreview);
+    m_previewTimer.setInterval(16);
+    connect(&m_previewTimer, &QTimer::timeout, this, &ImageEditor::startRender);
+
+    connect(&m_openWatcher, &QFutureWatcher<OpenResult>::finished, this, [this] {
+        const OpenResult result = m_openWatcher.result();
+        if (result.session != m_session) return;
+        setBusy(false);
+        if (!result.ok) { setStatus("Could not open this image: " + result.error); return; }
+        m_proxy = result.proxy;
+        m_sourceSize = result.sourceSize;
+        m_ready = true;
+        emit readyChanged();
+        setStatus(QString("Original: %1 × %2 px").arg(m_sourceSize.width()).arg(m_sourceSize.height()));
+        startRender();
+    });
+
+    connect(&m_renderWatcher, &QFutureWatcher<RenderResult>::finished, this, [this] {
+        const RenderResult result = m_renderWatcher.result();
+        if (result.session == m_session && m_ready) {
+            if (!result.ok) {
+                setStatus("Could not render the edit preview: " + result.error);
+            } else {
+                if (m_provider) m_provider->setImage(result.image);
+                m_previewUrl = QUrl(QString("image://ghostframe-edit/preview/%1").arg(++m_previewRevision));
+                m_displaySize = result.size;
+                m_lastRenderMs = result.milliseconds;
+                emit previewChanged();
+                setStatus(QString("Preview %1 ms · %2 × %3 px output")
+                              .arg(result.milliseconds).arg(m_displaySize.width()).arg(m_displaySize.height()));
+            }
+        }
+        if (m_renderPending) { m_renderPending = false; startRender(); }
+    });
+
+    connect(&m_exportWatcher, &QFutureWatcher<ExportResult>::finished, this, [this] {
+        const ExportResult result = m_exportWatcher.result();
+        setBusy(false);
+        if (result.session != m_session) { QFile::remove(result.stagingPath); return; }
+        if (!result.ok) {
+            QFile::remove(result.stagingPath);
+            setStatus(result.error.isEmpty() ? "Could not render this export." : result.error.left(220));
+            return;
+        }
+        if (!QFile::rename(result.stagingPath, result.path)) {
+            QFile::remove(result.stagingPath);
+            setStatus("Could not finalize the export in the Ghostframe Exports folder.");
+            return;
+        }
+        if (!writeCybermeta(result.path, m_pendingTitle, m_pendingCaption, m_pendingTags)) {
+            setStatus("The image exported, but its Cybermeta XMP sidecar could not be written.");
+            emit saved(result.path);
+            return;
+        }
+        setStatus("Export and Cybermeta saved to " + QFileInfo(result.path).absolutePath() + ".");
+        emit saved(result.path);
+    });
+}
+
+ImageEditor::~ImageEditor() {
+    // Workers hold no pointer to this object, but libvips must outlive them.
+    m_openWatcher.waitForFinished();
+    m_renderWatcher.waitForFinished();
+    m_exportWatcher.waitForFinished();
 }
 
 void ImageEditor::setBusy(bool value) { if (m_busy != value) { m_busy = value; emit busyChanged(); } }
@@ -26,98 +91,152 @@ void ImageEditor::setStatus(const QString &value) { if (m_status != value) { m_s
 void ImageEditor::openOriginal(const QString &path, const QString &title, const QString &hash, const QString &folder, const QString &originalName) {
     cancel();
     m_sourcePath = path; m_title = title; m_hash = hash; m_folder = folder; m_originalName = originalName;
-    m_rotation = 0; m_brightness = 0; m_contrast = 0; m_saturation = 100; m_hasCrop = false;
-    emit sourceChanged(); emit adjustmentsChanged(); emit cropChanged();
-    if (m_magick.isEmpty()) { setStatus("ImageMagick is required. Install the imagemagick package and reopen Ghostframe."); return; }
+    m_ownsSource = true;
+    m_recipe = {};
+    m_history.reset(m_recipe);
+    emit sourceChanged(); emit adjustmentsChanged(); emit cropChanged(); emit historyChanged(); emit recipeChanged();
     if (!QFileInfo::exists(path)) { setStatus("The temporary full-resolution working copy is missing."); return; }
-    setBusy(true); setStatus("Preparing full-resolution image…");
-    auto *probe = new QProcess(this);
-    connect(probe, &QProcess::finished, this, [this, probe](int code, QProcess::ExitStatus exitStatus) {
-        const QByteArray output = probe->readAllStandardOutput().trimmed();
-        probe->deleteLater();
-        const auto parts = output.split(' ');
-        if (code != 0 || exitStatus != QProcess::NormalExit || parts.size() != 2) {
-            setBusy(false); setStatus("ImageMagick could not read this image format."); return;
+    setBusy(true);
+    setStatus("Preparing image…");
+    const int session = m_session;
+    m_openWatcher.setFuture(QtConcurrent::run([session, path] {
+        OpenResult result;
+        result.session = session;
+        try {
+            result.sourceSize = ImageEngine::sourceSize(path);
+            result.proxy = ImageEngine::loadProxy(path);
+            result.ok = true;
+        } catch (const vips::VError &e) {
+            result.error = QString::fromUtf8(e.what()).trimmed();
         }
-        bool wOk = false, hOk = false;
-        m_sourceWidth = parts.at(0).toInt(&wOk); m_sourceHeight = parts.at(1).toInt(&hOk);
-        if (!wOk || !hOk || m_sourceWidth < 1 || m_sourceHeight < 1) { setBusy(false); setStatus("Image dimensions could not be read."); return; }
-        m_ready = true; emit readyChanged(); setBusy(false); setStatus(QString("Original: %1 × %2 px").arg(m_sourceWidth).arg(m_sourceHeight));
-        updatePreview();
-    });
-    probe->start(m_magick, {path + "[0]", "-auto-orient", "-format", "%w %h", "info:"});
+        return result;
+    }));
 }
 
-QStringList ImageEditor::editArguments(bool preview) const {
-    QStringList args{m_sourcePath + "[0]", "-auto-orient"};
-    if (m_rotation) args << "-rotate" << QString::number(m_rotation);
-    if (m_brightness != 0 || m_contrast != 0)
-        args << "-brightness-contrast" << QString("%1x%2").arg(m_brightness, 0, 'f', 1).arg(m_contrast, 0, 'f', 1);
-    if (m_saturation != 100) args << "-modulate" << QString("100,%1,100").arg(m_saturation, 0, 'f', 1);
-    int width = (m_rotation == 90 || m_rotation == 270) ? m_sourceHeight : m_sourceWidth;
-    int height = (m_rotation == 90 || m_rotation == 270) ? m_sourceWidth : m_sourceHeight;
-    if (m_hasCrop) {
-        const int x = qBound(0, qRound(m_cropX * width), width - 1);
-        const int y = qBound(0, qRound(m_cropY * height), height - 1);
-        const int w = qBound(1, qRound(m_cropWidth * width), width - x);
-        const int h = qBound(1, qRound(m_cropHeight * height), height - y);
-        args << "-crop" << QString("%1x%2+%3+%4").arg(w).arg(h).arg(x).arg(y) << "+repage";
-    }
-    if (preview) args << "-resize" << "1600x1200>";
-    return args;
+void ImageEditor::openLocalFile(const QString &path) {
+    const QFileInfo info(path);
+    openOriginal(info.absoluteFilePath(), info.completeBaseName(), QString(), info.absolutePath(), info.fileName());
+    m_ownsSource = false;
 }
 
-void ImageEditor::updatePreview() {
-    if (!m_ready || m_sourcePath.isEmpty()) return;
-    if (m_previewProcess && m_previewProcess->state() != QProcess::NotRunning) { m_previewProcess->kill(); m_previewProcess->waitForFinished(1000); }
-    const QString output = m_tempDir.filePath(QString("preview-%1.jpg").arg(++m_previewRevision));
-    auto *process = new QProcess(this); m_previewProcess = process;
-    auto args = editArguments(true); args << "-quality" << "88" << output;
-    connect(process, &QProcess::finished, this, [this, process, output](int code, QProcess::ExitStatus) {
-        if (process != m_previewProcess) { process->deleteLater(); return; }
-        process->deleteLater(); m_previewProcess = nullptr;
-        if (code != 0 || !QFileInfo::exists(output)) { setStatus("Could not render edit preview."); return; }
-        m_previewUrl = QUrl::fromLocalFile(output);
-        m_displayWidth = (m_rotation == 90 || m_rotation == 270) ? m_sourceHeight : m_sourceWidth;
-        m_displayHeight = (m_rotation == 90 || m_rotation == 270) ? m_sourceWidth : m_sourceHeight;
-        if (m_hasCrop) { m_displayWidth = qRound(m_displayWidth * m_cropWidth); m_displayHeight = qRound(m_displayHeight * m_cropHeight); }
-        emit previewChanged();
-        setStatus(QString("Preview ready · %1 × %2 px source").arg(m_displayWidth).arg(m_displayHeight));
-    });
-    process->start(m_magick, args);
+void ImageEditor::schedulePreview() { if (m_ready) m_previewTimer.start(); }
+
+void ImageEditor::startRender() {
+    if (!m_ready) return;
+    if (m_renderWatcher.isRunning()) { m_renderPending = true; return; }
+    const int session = m_session;
+    const vips::VImage proxy = m_proxy;
+    const EditRecipe recipe = m_recipe;
+    const QSize sourceSize = m_sourceSize;
+    m_renderWatcher.setFuture(QtConcurrent::run([session, proxy, recipe, sourceSize] {
+        RenderResult result;
+        result.session = session;
+        QElapsedTimer timer;
+        timer.start();
+        try {
+            result.image = ImageEngine::toQImage(ImageEngine::apply(proxy, recipe));
+            // Report the full-resolution output size, not the proxy's.
+            const bool quarterTurn = recipe.rotation == 90 || recipe.rotation == 270;
+            QSize size = quarterTurn ? sourceSize.transposed() : sourceSize;
+            if (recipe.hasCrop) size = QSize(qRound(size.width() * recipe.cropWidth), qRound(size.height() * recipe.cropHeight));
+            result.size = size;
+            result.ok = true;
+        } catch (const vips::VError &e) {
+            result.error = QString::fromUtf8(e.what()).trimmed();
+        }
+        result.milliseconds = int(timer.elapsed());
+        return result;
+    }));
+}
+
+void ImageEditor::setRecipe(const EditRecipe &recipe, bool commit) {
+    const EditRecipe before = m_recipe;
+    m_recipe = recipe;
+    if (before.brightness != recipe.brightness || before.contrast != recipe.contrast
+        || before.saturation != recipe.saturation || before.rotation != recipe.rotation)
+        emit adjustmentsChanged();
+    if (before.hasCrop != recipe.hasCrop || before.cropX != recipe.cropX || before.cropY != recipe.cropY
+        || before.cropWidth != recipe.cropWidth || before.cropHeight != recipe.cropHeight)
+        emit cropChanged();
+    if (commit) m_history.commit(m_recipe);
+    if (before != recipe) emit recipeChanged();
+    emit historyChanged();
+    schedulePreview();
 }
 
 void ImageEditor::setAdjustments(double brightness, double contrast, double saturation) {
-    m_brightness = qBound(-100.0, brightness, 100.0); m_contrast = qBound(-100.0, contrast, 100.0); m_saturation = qBound(0.0, saturation, 200.0);
-    emit adjustmentsChanged(); m_previewTimer.start();
+    EditRecipe r = m_recipe;
+    r.brightness = qBound(-100.0, brightness, 100.0);
+    r.contrast = qBound(-100.0, contrast, 100.0);
+    r.saturation = qBound(0.0, saturation, 200.0);
+    setRecipe(r, false);
 }
+
+void ImageEditor::commitEdit() {
+    if (m_history.commit(m_recipe)) emit historyChanged();
+}
+
 void ImageEditor::rotateBy(int degrees) {
-    m_rotation = (m_rotation + degrees) % 360; if (m_rotation < 0) m_rotation += 360;
-    emit adjustmentsChanged(); m_previewTimer.start();
+    EditRecipe r = m_recipe;
+    r.rotation = (((r.rotation + degrees) % 360) + 360) % 360;
+    setRecipe(r, true);
 }
+
 void ImageEditor::setCrop(double x, double y, double width, double height) {
+    EditRecipe r = m_recipe;
     const double x2 = qBound(0.0, x + width, 1.0), y2 = qBound(0.0, y + height, 1.0);
-    m_cropX = qBound(0.0, x, 1.0); m_cropY = qBound(0.0, y, 1.0);
-    m_cropWidth = x2 - m_cropX; m_cropHeight = y2 - m_cropY;
-    m_hasCrop = m_cropWidth > 0.015 && m_cropHeight > 0.015;
-    emit cropChanged(); m_previewTimer.start();
+    r.cropX = qBound(0.0, x, 1.0);
+    r.cropY = qBound(0.0, y, 1.0);
+    r.cropWidth = x2 - r.cropX;
+    r.cropHeight = y2 - r.cropY;
+    r.hasCrop = r.cropWidth > 0.015 && r.cropHeight > 0.015;
+    if (!r.hasCrop) { r.cropX = r.cropY = 0; r.cropWidth = r.cropHeight = 1; }
+    setRecipe(r, true);
 }
-void ImageEditor::clearCrop() { m_hasCrop = false; m_cropX = m_cropY = 0; m_cropWidth = m_cropHeight = 1; emit cropChanged(); m_previewTimer.start(); }
-void ImageEditor::resetEdits() { m_rotation = 0; m_brightness = 0; m_contrast = 0; m_saturation = 100; clearCrop(); emit adjustmentsChanged(); }
+
+void ImageEditor::clearCrop() {
+    EditRecipe r = m_recipe;
+    r.hasCrop = false;
+    r.cropX = r.cropY = 0;
+    r.cropWidth = r.cropHeight = 1;
+    setRecipe(r, true);
+}
+
+void ImageEditor::resetEdits() { setRecipe({}, true); }
+
+void ImageEditor::undo() {
+    commitEdit();  // an uncommitted slider change becomes its own step first
+    if (!m_history.canUndo()) return;
+    setRecipe(m_history.undo(), false);
+}
+
+void ImageEditor::redo() {
+    if (m_recipe != m_history.current() || !m_history.canRedo()) return;
+    setRecipe(m_history.redo(), false);
+}
+
 void ImageEditor::cancel() {
+    ++m_session;  // in-flight worker results are now ignored
     m_previewTimer.stop();
-    if (m_previewProcess && m_previewProcess->state() != QProcess::NotRunning) m_previewProcess->kill();
-    if (m_process && m_process->state() != QProcess::NotRunning) m_process->kill();
-    m_ready = false; emit readyChanged(); setBusy(false);
-    if (!m_sourcePath.isEmpty() && m_sourcePath.startsWith(m_tempDir.path() + QDir::separator())) QFile::remove(m_sourcePath);
+    m_renderPending = false;
+    m_ready = false;
+    emit readyChanged();
+    setBusy(false);
+    m_proxy = vips::VImage();
+    if (m_provider) m_provider->setImage({});
+    if (m_ownsSource && !m_sourcePath.isEmpty()) QFile::remove(m_sourcePath);
+    m_ownsSource = false;
     m_sourcePath.clear();
     m_title.clear(); m_hash.clear(); m_folder.clear(); m_originalName.clear();
-    m_previewUrl = QUrl(); emit previewChanged(); emit sourceChanged();
+    m_previewUrl = QUrl();
+    m_displaySize = {};
+    emit previewChanged(); emit sourceChanged();
 }
 
 bool ImageEditor::writeCybermeta(const QString &path, const QString &title, const QString &caption, const QString &tags) const {
     QSaveFile file(path + ".xmp");
     if (!file.open(QIODevice::WriteOnly)) return false;
+    const EditRecipe &r = m_exportRecipe;
     QXmlStreamWriter xml(&file); xml.setAutoFormatting(true); xml.writeStartDocument();
     xml.writeStartElement("x:xmpmeta"); xml.writeAttribute("xmlns:x", "adobe:ns:meta/");
     xml.writeStartElement("rdf:RDF"); xml.writeAttribute("xmlns:rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#");
@@ -139,19 +258,25 @@ bool ImageEditor::writeCybermeta(const QString &path, const QString &title, cons
     xml.writeTextElement("xmp:MetadataDate", QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
     xml.writeTextElement("cybermeta:version", "1.0");
     xml.writeTextElement("cybermeta:sourceHash", m_hash); xml.writeTextElement("cybermeta:sourceFolder", m_folder);
-    xml.writeTextElement("cybermeta:sourceFilename", m_originalName); xml.writeTextElement("cybermeta:rotation", QString::number(m_rotation));
-    xml.writeTextElement("cybermeta:brightness", QString::number(m_brightness)); xml.writeTextElement("cybermeta:contrast", QString::number(m_contrast));
-    xml.writeTextElement("cybermeta:saturation", QString::number(m_saturation));
-    xml.writeTextElement("cybermeta:crop", m_hasCrop ? QString("%1,%2,%3,%4").arg(m_cropX).arg(m_cropY).arg(m_cropWidth).arg(m_cropHeight) : "none");
+    xml.writeTextElement("cybermeta:sourceFilename", m_originalName);
+    // The full recipe (reopenable); the flat fields below stay for tools that
+    // read sidecars from earlier Ghostframe versions.
+    xml.writeTextElement("cybermeta:recipe", r.toJsonString());
+    xml.writeTextElement("cybermeta:rotation", QString::number(r.rotation));
+    xml.writeTextElement("cybermeta:brightness", QString::number(r.brightness)); xml.writeTextElement("cybermeta:contrast", QString::number(r.contrast));
+    xml.writeTextElement("cybermeta:saturation", QString::number(r.saturation));
+    xml.writeTextElement("cybermeta:crop", r.hasCrop ? QString("%1,%2,%3,%4").arg(r.cropX).arg(r.cropY).arg(r.cropWidth).arg(r.cropHeight) : "none");
     xml.writeEndElement(); xml.writeEndElement(); xml.writeEndElement(); xml.writeEndDocument();
     if (xml.hasError()) { file.cancelWriting(); return false; }
     return file.commit();
 }
 
 void ImageEditor::save(const QString &title, const QString &caption, const QString &tags) {
-    if (!m_ready || m_busy) return;
-    const QString base = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation) + "/Ghostframe/Exports";
-    if (!QDir().mkpath(base)) { setStatus("Could not create ~/Pictures/Ghostframe/Exports."); return; }
+    // A cancelled export may still be finishing; let it clean up first.
+    if (!m_ready || m_busy || m_exportWatcher.isRunning()) return;
+    commitEdit();
+    const QString base = m_exportDir;
+    if (!QDir().mkpath(base)) { setStatus("Could not create the export folder " + base + "."); return; }
     QString stem = QFileInfo(m_originalName).completeBaseName();
     if (stem.isEmpty()) stem = "Ghostframe-Image";
     stem.replace(QRegularExpression("[^A-Za-z0-9_-]+"), "-");
@@ -159,21 +284,24 @@ void ImageEditor::save(const QString &title, const QString &caption, const QStri
     const QString extension = QFileInfo(m_originalName).suffix().toLower();
     const QString format = (extension == "png" || extension == "webp" || extension == "tif" || extension == "tiff") ? extension : "jpg";
     const QString unique = QUuid::createUuid().toString(QUuid::WithoutBraces).left(8);
-    const QString path = base + "/" + stem + "-Ghostframe-" + timestamp + "-" + unique + "." + format;
-    const QString stagingPath = base + "/." + stem + "-Ghostframe-" + timestamp + "-" + unique + "-working." + format;
-    auto *process = new QProcess(this); m_process = process; setBusy(true); setStatus("Rendering full-resolution export…");
-    auto args = editArguments(false);
-    if (format == "jpg") args << "-quality" << "95";
-    args << stagingPath;
-    connect(process, &QProcess::finished, this, [this, process, path, stagingPath, title, caption, tags](int code, QProcess::ExitStatus exitStatus) {
-        const QString errorOutput = QString::fromUtf8(process->readAllStandardError()).trimmed();
-        process->deleteLater(); m_process = nullptr; setBusy(false);
-        if (code != 0 || exitStatus != QProcess::NormalExit || !QFileInfo::exists(stagingPath) || QFileInfo(stagingPath).size() == 0) {
-            QFile::remove(stagingPath); setStatus(errorOutput.isEmpty() ? "ImageMagick failed to render this export." : errorOutput.left(220)); return;
-        }
-        if (!QFile::rename(stagingPath, path)) { QFile::remove(stagingPath); setStatus("Could not finalize the export in the Ghostframe Exports folder."); return; }
-        if (!writeCybermeta(path, title, caption, tags)) { setStatus("The image exported, but its Cybermeta XMP sidecar could not be written."); emit saved(path); return; }
-        setStatus("Export and Cybermeta saved to ~/Pictures/Ghostframe/Exports."); emit saved(path);
-    });
-    process->start(m_magick, args);
+    const QString name = stem + "-Ghostframe-" + timestamp + "-" + unique;
+    const QString path = base + "/" + name + "." + format;
+    const QString stagingPath = base + "/." + name + "-working." + format;
+
+    m_pendingTitle = title; m_pendingCaption = caption; m_pendingTags = tags;
+    m_exportRecipe = m_recipe;
+    setBusy(true);
+    setStatus("Rendering full-resolution export…");
+    const int session = m_session;
+    const QString source = m_sourcePath;
+    const EditRecipe recipe = m_recipe;
+    m_exportWatcher.setFuture(QtConcurrent::run([session, source, recipe, stagingPath, path] {
+        ExportResult result;
+        result.session = session;
+        result.stagingPath = stagingPath;
+        result.path = path;
+        result.ok = ImageEngine::exportImage(source, recipe, stagingPath, &result.error)
+                    && QFileInfo(stagingPath).size() > 0;
+        return result;
+    }));
 }

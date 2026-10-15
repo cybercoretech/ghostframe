@@ -14,11 +14,13 @@ The current client foundation includes:
 
 - 🌌 A dark Cybercore desktop layout with a collection rail, image grid, status strip, and full-screen viewer.
 - 🔎 PhotoPrism API connection, bearer-token authentication, text search, paged photo results, and a nested browser for your original folders.
-- 🧭 Keyboard shortcuts: `Ctrl+K` focuses search, `Enter` runs it, `Ctrl+R` refreshes the current query, and `Esc` closes the viewer.
+- 🧭 Keyboard shortcuts: `Ctrl+K` focuses search, `Enter` runs it, `Ctrl+R` refreshes the current query, `Esc` closes the viewer or editor, and `Q` closes the top layer. In the editor, `Ctrl+Z` undoes and `Ctrl+Shift+Z` / `Ctrl+Y` redoes.
 - 🔐 PhotoPrism credentials are restored automatically on launch. Ghostframe saves the connection in an owner-only local file and never contacts the desktop keyring, so launching it cannot trigger a keyring unlock prompt.
 - 🖼️ Capability-token thumbnails served directly by PhotoPrism, without sending account credentials in image URLs.
-- 🎛️ Built-in image editor with 90° rotation, drag-to-crop, light, contrast, and saturation controls. Previews are rendered quickly while exports use the original full-resolution image.
-- 🧬 Cybermeta sidecars: each export gets an XMP file containing title, caption, tags, source identity, and the edit recipe. The image and metadata stay portable outside Ghostframe.
+- 🎛️ **Image Lab** editor on an in-process ⚡ **libvips** engine: 90° rotation, drag-to-crop (repeatable, to refine a crop), light, contrast and saturation. Sliders preview live (~15 ms per frame on a 1600 px proxy, rendered off the UI thread), and exports render the original at full resolution.
+- ↩️ Undo / redo for every edit. A slider drag counts as one step.
+- 📜 **Edit recipes:** every edit is a versioned JSON recipe. Preview and export render the same recipe, and it is saved with the export.
+- 🧬 Cybermeta sidecars: each export gets an XMP file containing title, caption, tags, source identity, and the full edit recipe (`cybermeta:recipe`). The image and metadata stay portable outside Ghostframe.
 - 📤 Safe exports to `~/Pictures/Ghostframe/Exports/`; the source image stays untouched.
 - 🐧 Native Linux packaging groundwork for Omarchy/Arch.
 
@@ -38,6 +40,24 @@ The current client foundation includes:
                                                    Your photo storage
 ```
 
+Inside the app:
+
+```text
+qml/            Qt Quick UI: Main.qml (window shell) + one file per component,
+                Theme.qml singleton (palette, fonts)
+src/photoservice.*    PhotoPrism API client and photo/folder models
+src/imageeditor.*     Editor state for QML: recipe, undo history, async
+                      preview/export, Cybermeta XMP sidecar
+src/imageengine.*     libvips pipeline: load, preview proxy, apply recipe,
+                      to-QImage, full-resolution export (pure, thread-safe)
+src/editrecipe.*      Versioned JSON edit recipe
+src/edithistory.*     Undo/redo over recipe states
+src/previewprovider.h image://ghostframe-edit/… frames for QML (no temp files)
+tests/                Qt Test suite (engine, recipe, history, editor end to end)
+```
+
+🧪 **Preview pipeline.** Opening a photo builds a small in-memory *proxy* (fits 1600×1200) with libvips' shrink-on-load. Every slider move re-renders only the proxy on a worker thread. If renders queue up, only the newest runs. The result goes straight to QML through an image provider. **Export** runs the same recipe on the full-resolution original, writes a hidden staging file, and renames it into place only after it succeeds.
+
 The interface talks to PhotoPrism's documented API. PhotoPrism keeps responsibility for indexing and AI; Ghostframe focuses on browsing. This keeps the app independent of PhotoPrism's internal database and makes it easier to track upstream changes.
 
 ## 🤖 AI and privacy
@@ -52,7 +72,7 @@ This initial design is **self-hosted, not end-to-end encrypted**. PhotoPrism nee
 - `qmake6`, a C++20 compiler, and `make` to build from source.
 - A reachable PhotoPrism server. The default local address is `http://127.0.0.1:2342`.
 - A PhotoPrism app password with photo read access. Ghostframe stores it in an owner-only local file for automatic reconnects.
-- ImageMagick 7 (`imagemagick`) for editor previews and full-resolution exports.
+- ⚡ libvips 8.15 or newer with its C++ binding (`libvips` on Arch; `pkg-config vips-cpp` must work) for the editor. ImageMagick is no longer required.
 
 ## 🚀 Build and run
 
@@ -64,11 +84,28 @@ make -j"$(nproc)"
 ./ghostframe
 ```
 
+### 🧪 Run the tests
+
+```sh
+cd tests
+qmake6 && make -j"$(nproc)"
+QT_QPA_PLATFORM=offscreen ./tst_ghostframe
+```
+
+The suite generates its fixture images at runtime. It covers the recipe format, undo/redo, the libvips pipeline (rotation, crop, alpha, clipping, and pixel values checked against ImageMagick 7.1's `-brightness-contrast`), a full editor session through to the exported file and its XMP sidecar, and a speed check: one preview render on a proxy of a 6000×4000 image must take under 100 ms.
+
 On first launch, enter your PhotoPrism URL and app password once. Ghostframe verifies the connection and saves the credential in an owner-only file in its per-user configuration directory. It restores the connection automatically on later launches, without invoking Secret Service or asking to unlock a desktop keyring. Keep your Linux account protected; the local fallback is readable only by your account.
 
 ### Edit and export a photo
 
-Open a photo from the library and choose **EDIT IMAGE**. Ghostframe downloads a temporary full-resolution working copy from PhotoPrism, then lets you rotate, crop by dragging on the preview, adjust light, contrast, and saturation, and enter title, caption, and comma-separated tags. **SAVE EXPORT + CYBERMETA** writes a new image and matching `.xmp` sidecar into `~/Pictures/Ghostframe/Exports/`. Ghostframe never writes edits into the original. The XMP sidecar includes the PhotoPrism source hash and folder plus the applied edit values, so the export can be understood and catalogued by other photo tools.
+Open a photo from the library and choose **✎ EDIT IMAGE**. Ghostframe downloads a temporary full-resolution working copy from PhotoPrism and opens the **Image Lab**:
+
+- 🔄 **Transform:** rotate left/right; drag on the preview to crop, and drag again to crop further. **CLEAR CROP** goes back to the full frame.
+- 🌗 **Tone:** LIGHT, CONTRAST and SATURATION sliders preview live. LIGHT and CONTRAST follow ImageMagick 7.1's `-brightness-contrast`, so edits look the same as in earlier versions.
+- ↩️ **UNDO / REDO** buttons (or `Ctrl+Z` / `Ctrl+Shift+Z`). **RESET ALL** is itself undoable.
+- 🧬 **Cybermeta:** title, caption and comma-separated tags.
+
+**SAVE EXPORT + CYBERMETA** writes a new full-resolution image and a matching `.xmp` sidecar into `~/Pictures/Ghostframe/Exports/`. Ghostframe never writes edits into the original, and it deletes the temporary working copy when you close the editor. The sidecar holds the PhotoPrism source hash and folder, the full recipe as JSON (`cybermeta:recipe`), and the individual values for tools that read older Ghostframe sidecars.
 
 ### Create a read-only PhotoPrism app password
 
@@ -146,11 +183,16 @@ The full phase-by-phase build plan lives in **[docs/ROADMAP.md](docs/ROADMAP.md)
 | 🖌️ | **5 · Local edits** | Masks, heal/clone, layers |
 | 🚀 | **6 · Shipping** | Live CYBERGRID theming, AUR package, project site |
 
-Already done ✅: the Qt Quick shell and PhotoPrism client, the Cybercore theme, authenticated search and thumbnails, the nested folder browser, keyring-free auto-reconnect, and the first built-in editor.
+Already done ✅: the Qt Quick shell and PhotoPrism client, the Cybercore theme, authenticated search and thumbnails, the nested folder browser, keyring-free auto-reconnect, and **Phase 0 · Foundation** (component UI, libvips engine, recipes, undo/redo, tests).
 
 ## 🛠️ Development notes
 
-Project entry point: `ghostframe.pro`. Qt Quick UI: `qml/Main.qml`. The API/model implementation is in `src/photoservice.*`. The authentication token is saved in an owner-only file under the per-user configuration directory for automatic reconnects. Do not commit secrets, photo samples, or local PhotoPrism configuration.
+- 📁 Project entry point: `ghostframe.pro`. Core sources shared with the tests are listed in `ghostframe.pri`. See *Architecture* for the file map.
+- 🧩 New QML component: add the file to `qml/` **and** to `qml.qrc`. Use `Theme.*` for colors and fonts, never a local id named `palette` (`Item.palette` shadows it inside delegates).
+- 📜 New edit operation: add it to `EditRecipe` (JSON `toJson`/`fromJson`, with clamping), apply it in `ImageEngine::apply`, and add a test. Unknown ops are ignored when reading, so older Ghostframe builds can still open newer recipes.
+- 🖼️ `GHOSTFRAME_EDIT=/path/to/image ./ghostframe` opens the editor on a local file without PhotoPrism. The file is never modified or deleted.
+- 📸 `GHOSTFRAME_GRAB=/tmp/shot.png[:ms]` saves a window screenshot after the delay and quits. Add `QT_QPA_PLATFORM=offscreen` for headless checks, and `QT_FORCE_STDERR_LOGGING=1` to see QML warnings.
+- 🔐 The PhotoPrism token is saved in an owner-only file under the per-user configuration directory. Do not commit secrets, photo samples, or local PhotoPrism configuration.
 
 ## 📜 License
 
