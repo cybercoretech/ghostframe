@@ -86,12 +86,21 @@ The generic `read` scope grants read-only API access across PhotoPrism resources
 This repository includes a local Compose setup. It indexes `/home/raven/Pictures` read-only, keeps the PhotoPrism database and generated files under `/home/raven/Pictures/.ghostframe/`, and serves only on `127.0.0.1:2342` by default. Existing image folders remain unchanged. Start or stop the service with:
 
 ```sh
-cd /home/raven/Work/ghostframe
+cd ~/Devspace/Cybercore/core/ghostframe
 cp deploy/.env.example deploy/.env
 # Replace the example passwords in deploy/.env with unique secrets before first start.
+systemctl --user start podman.socket   # podman compose talks to Podman's API socket
 podman compose -f deploy/compose.yaml up -d
 podman compose -f deploy/compose.yaml down
 ```
+
+🔁 **Start at login.** Once the containers exist, the `ghostframe-library.service` user unit starts and stops them by name (`podman start deploy-mariadb-1 deploy-photoprism-1`), so it doesn't depend on the checkout location or the API socket:
+
+```sh
+systemctl --user enable --now ghostframe-library.service
+```
+
+> 🧩 If `podman compose` reports `failed to connect to the docker API at unix:///run/user/1000/podman/podman.sock`, the socket isn't running: `systemctl --user start podman.socket` (or `enable --now` to keep it).
 
 The `deploy/.env` file holds the generated local database and admin credentials and is excluded from Git. For a different server, follow the [official PhotoPrism installation guide](https://docs.photoprism.app/getting-started/). The app expects the API at `<server-url>/api/v1` and capability URLs for thumbnails.
 
