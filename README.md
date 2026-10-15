@@ -304,10 +304,22 @@ The full phase-by-phase build plan lives in **[docs/ROADMAP.md](docs/ROADMAP.md)
 | ✨ | **2 · Cyber FX** | Neon bloom, chromatic aberration, scanlines, glitch, CYBERGRID duotones, LUTs, Shorts/thumbnail export presets |
 | 🧬 | **3 · Cybermeta** | Metadata panel and GPS stripping on export through the [cybermeta](https://github.com/cybercore-tech/cybermeta) CLI |
 | 🗂️ | **4 · Library** | Ratings, culling, albums, compare view, batch export, Holodrive phone-inbox import |
-| 🖌️ | **5 · Local edits** | Masks, heal/clone, layers |
+| 🖌️ | **5A–5E · Express editor (planned)** | Layers → selections/painting/retouching → curated G’MIC effects → Blender scene templates → optional interactive 3D/nodes |
 | 🚀 | **6 · Shipping** | Live CYBERGRID theming, AUR package, project site |
 
 Already done ✅: the Qt Quick shell and PhotoPrism client, the Cybercore theme, authenticated search and thumbnails, the nested folder browser, keyring-free auto-reconnect, and **Phase 0 · Foundation** (component UI, libvips engine, recipes, undo/redo, tests), **Phase 1 · Darkroom** (the full Image Lab above) and **Phase 2 · Cyber FX** (effects, CYBERGRID gradients, LUTs, text, looks, export presets), and **Phase 3 · Cybermeta** (metadata panel, private-by-default exports, embedded XMP and sidecars via cybermeta).
+
+### 🎨 Express editor implementation sequence
+
+The planned direction combines **Edit** (photo adjustments and retouching), **Compose** (images, text and masks), and **Scene** (rendered 3D titles and mockups). These additions are not implemented yet. The [roadmap](docs/ROADMAP.md) defines completion criteria for each milestone:
+
+1. **5A · Layers:** a versioned document with image/text/group/adjustment layers, mask attachments, transforms, opacity and blend modes; managed assets, recipe migration, undo/redo and reopening.
+2. **5B · Local tools:** selections and brush/gradient masks, OpenCV-assisted cutouts and small-area healing, a clone stamp, and libmypaint painting.
+3. **5C · Effects:** optional curated G’MIC filters with saved parameters, proxy previews and cancellable jobs.
+4. **5D · Scenes:** optional Blender background CPU rendering for editable 3D titles, logos and mockups, composited as transparent scene layers.
+5. **5E · Exploration:** evaluate Filament for interactive 3D and an optional node view once the document model is established; hardware and licensing decisions precede adoption.
+
+Keep libvips for the CPU image pipeline. The user selected layers and composition as the next implementation, ahead of Phase 4; the Phase 4 library backlog remains separate, with local ratings/rejects, PhotoPrism favorites/albums, comparison, batch export, and a copy-only phone inbox import. Each named editor milestone gets its own PR; the user merges before the next dependent milestone begins.
 
 ## 🛠️ Development notes
 

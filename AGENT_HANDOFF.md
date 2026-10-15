@@ -6,8 +6,9 @@ it current: update it in the same PR as any phase or significant change.
 ## 📍 Repository state (2026-10-14)
 
 - **Repo:** `cybercore-tech/ghostframe` · local checkout `~/Devspace/Cybercore/core/ghostframe` on Blackbox.
-- **`main`:** `ea53e9c` (merge of PR #8, Phase 3). No open PRs.
-- **Roadmap:** [`docs/ROADMAP.md`](docs/ROADMAP.md). Phases 0–3 ✅. **Phase 4 · Library is next**; its decisions are recorded below.
+- **`main`:** `812e2b0` (merge of PR #9, the initial handoff). Phases 0–3 are implemented; PR #9 was merged, not left open. The local `main` was fast-forwarded from `ea53e9c` during this resume.
+- **Roadmap:** [`docs/ROADMAP.md`](docs/ROADMAP.md). The express editor implementation list is now Phase **5A–5E**. User-selected next implementation: **5A · Document and layers**; Phase 4 library decisions remain preserved below. No Phase 4 or 5 implementation has started.
+- **Current work:** documentation-only reconciliation on `docs/editor-expansion-plan`. The earlier `feat/composition-layers` branch contains no implementation commits; start the implementation branch from updated `main` after this planning PR merges.
 - **Tests:** 60 Qt tests, all passing on `main` (the Phase 3 ones need `cybermeta` + `exiftool`; they skip without them).
 - **CI:** none on GitHub yet. Tests run locally only. (Adding a workflow was offered to the user; not decided.)
 - **Installed build:** `~/.local/bin/ghostframe`, built from `main`. Launcher: `~/.local/share/applications/ghostframe.desktop`.
@@ -22,20 +23,34 @@ it current: update it in the same PR as any phase or significant change.
    qmake6 ghostframe.pro && make -j"$(nproc)"
    cd tests && qmake6 && make -j"$(nproc)" && QT_QPA_PLATFORM=offscreen ./tst_ghostframe
    ```
-4. Work on a branch from `main`, **one PR per phase, never stacked**. The user merges.
+4. Work on a branch from `main`, **one PR per phase or named editor milestone, never stacked**. The user merges. Phase 5 is split into 5A–5E so each deliverable is independently reviewable.
 5. **Every change updates the docs:** README (detailed, emoji section headers), `docs/ROADMAP.md` status, the Wiki page `~/Wiki/src/desktop/ghostframe.md` (mdBook; `mdbook build`, commit + push, private darkstardevx/Wiki), the vault note `~/Vaults/blackbox-notes/Projects/Ghostframe.md` (commit; no remote), and this file. Commit messages are detailed: what, why, how verified, and what wasn't verified.
 6. Before committing, check that `git config user.email` is `332800418+cybercore-tech@users.noreply.github.com`. `gh`'s *active* account is darkstardevx, so always use the `GH_TOKEN=…cybercore-tech` prefix for PRs.
-7. Install a new build with `install -m755 ghostframe ~/.local/bin/ghostframe`. A running window keeps the old binary; tell the user to restart.
+7. After the user merges a code PR, build and test merged `main`, then install the new build with `install -m755 ghostframe ~/.local/bin/ghostframe`. A running window keeps the old binary; tell the user to restart. A documentation-only update needs no installation.
 
 ## 🧭 Phase 4 · Library: decisions already made (2026-10-14)
 
 The user chose all four recommended options:
 
-- **Write access:** create a PhotoPrism app password with photos + albums **write** scope via `podman compose -f deploy/compose.yaml exec photoprism photoprism auth add …`, then store it in Ghostframe's owner-only credential file, replacing the read-only one. Nothing else is revoked. (The current token is `read` scope; a write probe returns 403.) `podman compose` needs `systemctl --user start podman.socket` first.
+- **Write access — already prepared:** the final message in Claude session `a00d28f8-535a-4c28-97b3-3930c6354651` records creating and saving "Ghostframe (library write)" in the owner-only credential file and verifying a favorite/unfavorite round trip. The former read-only password is backed up as `photoprism.credential.read-only.bak` and remains valid. Do not recreate or revoke credentials as a resume step. This resume read the session record; it did not repeat the live write probe. Restart Ghostframe if an existing window still has the old token loaded.
 - **Star ratings (1–5):** PhotoPrism has none. Store them in Ghostframe per photo (like `RecipeStore`), make them filterable in the library, and write them into exports as standard `xmp:Rating`. 5★ may also set PhotoPrism *Favorite*.
 - **Reject (X while culling):** mark it **in Ghostframe only** (hidden in culling/filtered views). Never touch PhotoPrism or the file; it's easy to undo.
 - **Holodrive phone inbox:** **copy** new photos from `~/Shared/from-phone` into `~/Pictures/Ghostframe/Inbox/<date>/`, then have PhotoPrism index them. Leave the phone inbox untouched.
 - Also in Phase 4 (roadmap): favorites/albums synced to PhotoPrism, keyboard culling (`P`/`X`/`1-5`), 2-up/4-up compare view, batch export (recipe/look → selection), and captions/labels written back to PhotoPrism.
+
+## 🎨 Express editor implementation list
+
+User direction: a compact GIMP/Blender-style editor with **Edit, Compose and Scene** workflows. Keep C++20/Qt Quick and the existing libvips engine. The detailed scope and acceptance criteria are in the roadmap; all items below remain planned.
+
+1. **5A · Document/layers:** image, text, groups, adjustment layers and mask attachments; transforms, blend modes, managed assets, old-recipe migration, undo/redo, reopening and consistent preview/export. The user selected this as the first implementation PR, ahead of Phase 4.
+2. **5B · Local tools:** selections and brush/gradient masks; OpenCV foreground extraction and small-area healing; explicit clone stamp; libmypaint painting/erasing. No generative object-removal promise.
+3. **5C · G’MIC:** optional curated effects with editable parameters, pinned definitions, proxy previews and cancellable background work.
+4. **5D · Blender templates:** optional Python-controlled background CPU rendering for 3D titles, logos and mockups; editable scene state and cached transparent scene layers.
+5. **5E · Interactive 3D/nodes:** optional Filament/hardware evaluation and graph editing after the document model is established. GEGL is an alternative to evaluate; Qt Quick 3D needs a GPLv3/commercial licensing decision.
+
+Do not introduce a GPU requirement for normal photo editing. Preserve originals and the Phase 3 export-privacy behavior. Test document migration and failure recovery as well as rendered pixels; store required imported assets so remembered compositions do not depend on a temporary source file.
+
+**Resume evidence:** before the earlier stop, the unchanged application built and all 60 tests passed (0 skipped) outside the execution sandbox. Inside the sandbox a libvips dependency could not open the display even with `QT_QPA_PLATFORM=offscreen`; this was an environment failure, not a failed pixel assertion. No implementation, installation or credential changes were made in this resume.
 
 ## 🧱 Architecture (where things are)
 
@@ -94,3 +109,4 @@ The user chose all four recommended options:
 | #6 | Phase 1 · Darkroom (full Image Lab, remembered edits, crop mode, 1:1) |
 | #7 | Phase 2 · Cyber FX (effects, CYBERGRID gradients, LUTs, text, looks, export presets) |
 | #8 | Phase 3 · Cybermeta (metadata panel, private exports, XMP; needs cybermeta ≥ 0.2.0, cybermeta PR #9) |
+| #9 | Initial root handoff and README link (merged) |

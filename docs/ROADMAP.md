@@ -2,9 +2,9 @@
 
 ### 👻 From photo browser to a Cybercore image system and editor
 
-This is the build plan agreed on 2026-10-14. Each phase ships as **one pull request**, and PRs are not stacked: a phase starts from `main` after the previous one merges. Every phase PR also updates this file, the README, the Wiki page (`~/Wiki/src/desktop/ghostframe.md`) and the Blackbox Notes project note.
+This is the build plan agreed on 2026-10-14, extended with the express image editor implementation sequence. Each phase or named editor milestone ships as **one pull request**, and PRs are not stacked: implementation starts from `main` after the previous PR merges. Every PR also updates this file, the README, `AGENT_HANDOFF.md`, the Wiki page (`~/Wiki/src/desktop/ghostframe.md`) and the Blackbox Notes project note.
 
-> ⚡ **Order:** Phase 0 ✅ → Phase 1 ✅ first (make the editor feel great), then Cyber FX, Cybermeta, library features, local edits, packaging.
+> ⚡ **Delivered:** Phases 0–3 and the handoff (PR #9). **User-selected priority:** editor layers and composition before Phase 4 library work. **Editor sequence:** 5A layers → 5B local tools → 5C curated effects → 5D scene templates → 5E optional interactive 3D/nodes. Phase 4 remains a separate library track with the decisions below preserved. No editor expansion milestone is implemented yet.
 
 ---
 
@@ -14,10 +14,10 @@ This is the build plan agreed on 2026-10-14. Each phase ships as **one pull requ
 |---|---|
 | 🔎 Library | PhotoPrism browse, search, paged grid, nested folder tree. *Recently Added* and *Favorites* use PhotoPrism search filters (`order:newest`, `favorite:true`). |
 | 🔐 Connection | Auto-reconnect from an owner-only local credential file; never touches the desktop keyring. |
-| 🎛️ Editor | 90° rotate, drag-crop, light / contrast / saturation. Every preview runs a separate `magick` process, so sliders lag. |
-| 🧬 Metadata | Ghostframe writes its own XMP sidecar (`cybermeta:` namespace, title / caption / tags / recipe). It does **not** use the [cybermeta](https://github.com/cybercore-tech/cybermeta) tool yet. |
+| 🎛️ Editor | In-process libvips darkroom, Cyber FX, LUTs, text overlays, recipes, history, draft/proxy previews and 1:1 zoom. General image layers and masks are still planned. |
+| 🧬 Metadata | [cybermeta](https://github.com/cybercore-tech/cybermeta) 0.2.0 reads metadata and writes embedded XMP plus sidecars. Exports strip GPS by default. |
 | 📤 Export | Full-resolution render to `~/Pictures/Ghostframe/Exports/`; originals are never modified. |
-| 🧱 Code | All UI in one `qml/Main.qml` (~420 lines, long one-line components). |
+| 🧱 Code | Qt Quick components in `qml/`; C++ engine, recipe, history, store and metadata bridge in `src/`. Baseline: 60 passing Qt tests. |
 
 ---
 
@@ -27,11 +27,15 @@ This is the build plan agreed on 2026-10-14. Each phase ships as **one pull requ
 |---|---|---|
 | ⚡ Live preview + export pipeline | **libvips** (C++ API, linked in-process) | Streaming, multi-threaded, low memory. No process per slider move. |
 | 📷 RAW / HEIC / AVIF / JXL | libvips + libraw + libheif | Camera RAW and modern formats through the same pipeline. |
-| 🧪 Rare effects, `.cube` / Hald LUTs | ImageMagick 7 | Huge filter catalog for heavier one-off operations. |
-| 🩹 Heal, clone, auto-straighten | OpenCV | Inpainting, edge and line detection. |
+| 🎞️ `.cube` LUTs | Existing C++ LUT implementation | Already delivered; no ImageMagick process required. |
+| 🧪 Curated extra effects | **G’MIC / libgmic** (planned, optional) | Parameterized filters and repair/stylization operations; preview on a proxy. |
+| 🩹 Selections and local repair | **OpenCV** (planned integration) | GrabCut for assisted selection; inpainting for small repairs. Clone stamp uses an explicit source offset, not inpainting. |
+| 🖌️ Painting | **libmypaint** (planned integration) | Brush strokes on editable surfaces; Ghostframe owns input, masks and history. |
+| 🧊 Scene templates | **Blender Python API + background worker** (planned, optional) | Render titles, logos and mockups into image layers, with CPU Cycles as the initial target. |
+| 🎥 Interactive 3D | **Filament** (later evaluation) | Native rendering and glTF loading; custom Qt integration and hardware validation required. |
 | 🧬 EXIF / XMP / privacy | **cybermeta** CLI (JSON) | Our own tool becomes Ghostframe's metadata core. |
 
-**🖥️ CPU, not GPU.** Blackbox's Radeon HD 6570 (Turks) already needs GPU compositing workarounds in Chromium apps. Editing stays on the CPU: libvips on 12 cores, working on a ~1600 px *preview proxy*, keeps sliders live. Full-resolution rendering happens only on export.
+**🖥️ CPU editing first.** Blackbox's Radeon HD 6570 (Turks) already needs GPU compositing workarounds in Chromium apps. Keep image editing on libvips with draft/proxy previews and full-resolution export/1:1 rendering. Initial Blender scene jobs use CPU rendering and stay optional. Interactive GPU 3D is a later capability check, not a new requirement for opening or editing photos.
 
 **🔗 Cybermeta integration = CLI first.** Ghostframe calls `cybermeta … --format json` through `QProcess`. Linking cybermeta as a Rust library over a C ABI can come later if the CLI becomes a bottleneck.
 
@@ -135,18 +139,73 @@ This is the build plan agreed on 2026-10-14. Each phase ships as **one pull requ
 
 ## 🗂️ Phase 4: Library power
 
-- ⭐ Set favorites, ratings (`1`–`5`) and pick/reject (`P` / `X`) from Ghostframe, synced to PhotoPrism. Keyboard culling mode.
+- ⭐ Favorites sync to PhotoPrism. Ratings (`1`–`5`) and pick/reject (`P` / `X`) are Ghostframe-local state for keyboard culling; rejects never change PhotoPrism or source files. Export ratings as standard `xmp:Rating`. Five stars may also set Favorite.
 - 📚 Albums: browse, create, add/remove photos.
 - 🪟 Compare view (2-up / 4-up).
 - 🏭 Batch export: apply a recipe or look to a selection, resize, convert format.
 - 📝 Write captions and labels back to PhotoPrism.
-- 📱 **Holodrive tie-in:** photos dropped in `~/Shared/from-phone` are imported into PhotoPrism automatically.
+- 📱 **Holodrive tie-in:** copy new photos from `~/Shared/from-phone` to `~/Pictures/Ghostframe/Inbox/<date>/`, then ask PhotoPrism to index the copies. Leave the phone inbox untouched.
 
-## 🖌️ Phase 5: Local edits
+**Connection preparation is complete:** the prior Claude session reports that the "Ghostframe (library write)" app password was created, saved and verified with a favorite/unfavorite round trip. The old read-only password remains valid and backed up. Do not create another password as a routine resume step. The library UI features above are not implemented yet.
 
-- 🎭 Brush, linear and radial gradient masks with per-mask adjustments.
-- 🩹 Heal and clone (OpenCV inpainting).
-- 🧅 Layers with blend modes and opacity.
+## 🖌️ Phase 5: Express editor — Edit, Compose, Scene
+
+The product direction is a compact GIMP/Blender-style workflow: edit a photo, compose image/text elements, and insert rendered 3D titles or mockups. Retain Qt Quick, libvips, original-file safety and the existing darkroom tools. These are planned capabilities, not installed features.
+
+### 🧅 5A · Document and layer foundation
+
+- A versioned document model with stable layer IDs, image/text/group/adjustment layers, ordering, visibility, opacity and blend modes.
+- Per-layer position, scale, rotation and flips, with consistent coordinates across preview and export; mask attachments and group composition rules.
+- Import images into managed project assets so edits survive renaming or removing the imported source. Define missing-asset recovery and portable project packaging; do not hide missing inputs during export.
+- Preserve existing v1 recipes and text overlays through explicit migration. Keep a shared rendering path for preview, zoom and export.
+- A layer panel and canvas selection/transform controls, integrated with labelled undo/redo and remembered edits. Existing Looks must preserve composition content.
+- Define RGBA/alpha handling, working color space and compositing order before adding render operations. Build on libvips compositing.
+
+**Done when:** a user can combine two images and text, group/reorder them, apply a masked adjustment, undo/redo, reopen the document, and export it without changing originals. Tests cover migration, blend/alpha pixels, masks, group order, asset failures, persistence and preview/export placement. Verify the QML controls in a headless UI session.
+
+### 🎭 5B · Selections, masks and local tools
+
+- Rectangle/lasso selections, feather/invert, brush masks, and linear/radial masks with local adjustments.
+- OpenCV GrabCut for assisted foreground extraction with corrective strokes; small-area healing through inpainting.
+- Clone stamp with a selectable source point and offset; keep clone and heal as separate tools.
+- libmypaint for painting/erasing with tablet pressure when available. Use tile updates or bounded regions and stroke-level history so drawing does not rerender the full document on every pointer event.
+
+**Done when:** a user can isolate a subject, refine its edge, paint a local adjustment, clone a region and heal a small blemish. Verify stroke undo, zoom-coordinate mapping, mask persistence and unchanged pixels outside the edited region. Large generative object removal is outside this milestone.
+
+### 🧪 5C · Curated G’MIC effects
+
+- An optional libgmic adapter or background CLI worker, a curated catalog, parameter controls and cached proxy previews.
+- Store filter identity, parameters, seeds and engine/definition version with the document. Pin filter definitions used by saved edits.
+- Support progress, cancellation, error reporting and missing-engine behavior without blocking basic editing. Export must report unavailable required effects rather than silently omit them.
+- Verify the licenses of the chosen library/CLI components and filter definitions before packaging them; do not assume the G’MIC-Qt plugin is a drop-in QML component.
+
+**Done when:** selected effects remain editable after reopening and render consistently at export resolution; tests cover repeatability, cancellation, unavailable dependencies and saved parameters.
+
+### 🧊 5D · Blender scene templates
+
+- Run Blender as an optional background process controlled by its Python API. Start with extruded titles, logo scenes and product mockups with a small set of camera/material/light controls.
+- Retain the editable scene parameters and assets, and composite a transparent render as a scene layer. Keep its cached render so documents can still be viewed when Blender is absent; mark stale renders explicitly.
+- CPU Cycles first, with low-cost preview settings, job progress/cancellation and full-quality export rendering. Do not run Blender on each slider movement.
+- Define alpha and color conversion between scene renders and libvips. Keep source scenes distinct from exported raster images.
+
+**Done when:** a user inserts a 3D title, changes its material/camera, cancels a render, reopens it for editing and exports the composition. Test missing Blender, failed/cancelled jobs, cache invalidation, transparent edges and document recovery. Full mesh modeling/sculpting is outside this milestone.
+
+### 🎥 5E · Optional interactive 3D and node editing
+
+- Evaluate Filament for a native glTF scene viewport only after measuring compatibility and responsiveness on the target machine. Keep a usable CPU/template workflow when GPU rendering is unavailable.
+- Build selection, transform gizmos, camera and lighting controls around the chosen renderer; a rendering engine does not supply a complete editor.
+- If needed, expose the existing document operations as a node graph with cycle validation, serialization and the same undo/render model. A node UI alone is not the processing engine.
+- GEGL is an alternative graph-processing engine to evaluate, not an additional mandatory pipeline. Qt Quick 3D is another integration option, but its GPLv3/commercial licensing differs from the current MIT application and requires an explicit distribution decision.
+
+**Done when:** the hardware evaluation and integration decision are documented, and any shipped viewport/graph preserves the same document semantics and export behavior. This milestone remains exploratory; it does not block 5A–5D or shipping the CPU editor.
+
+### 🔗 Upstream references
+
+- [libvips compositing](https://www.libvips.org/API/current/type_func.Image.composite.html)
+- [OpenCV GrabCut](https://docs.opencv.org/4.x/d8/d83/tutorial_py_grabcut.html) and [inpainting](https://docs.opencv.org/4.x/df/d3d/tutorial_py_inpainting.html)
+- [libmypaint](https://github.com/mypaint/libmypaint), [G’MIC / libgmic](https://gmic.eu/)
+- [Blender background rendering](https://docs.blender.org/manual/en/3.6/advanced/command_line/render.html)
+- [Filament](https://github.com/google/filament), [Qt Quick 3D](https://doc.qt.io/qt-6/qtquick3d-index.html), [GEGL](https://gegl.org/)
 
 ## 🚀 Phase 6: Polish and shipping
 
@@ -164,6 +223,11 @@ This is the build plan agreed on 2026-10-14. Each phase ships as **one pull requ
 | 1 · Darkroom | ✅ done | #6 |
 | 2 · Cyber FX | ✅ done | #7 |
 | 3 · Cybermeta | ✅ done | #8 (+ cybermeta #9) |
-| 4 · Library | ⏳ next | — |
-| 5 · Local edits | 🕓 planned | — |
+| Handoff | ✅ merged | #9 |
+| 4 · Library | 🕓 planned; write access prepared | — |
+| 5A · Document and layers | 🕓 first editor milestone | — |
+| 5B · Selections and local tools | 🕓 after 5A | — |
+| 5C · Curated G’MIC effects | 🕓 after 5B | — |
+| 5D · Blender scene templates | 🕓 after 5C | — |
+| 5E · Interactive 3D / nodes | 🔬 optional evaluation after 5D | — |
 | 6 · Shipping | 🕓 planned | — |
