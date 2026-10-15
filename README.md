@@ -311,6 +311,8 @@ Already done ✅: the Qt Quick shell and PhotoPrism client, the Cybercore theme,
 
 ## 🛠️ Development notes
 
+- 🤝 **Picking the project up?** Start with [`AGENT_HANDOFF.md`](AGENT_HANDOFF.md): current state, resume checklist, decisions already made, invariants and gotchas.
+
 - 📁 Project entry point: `ghostframe.pro`. Core sources shared with the tests are listed in `ghostframe.pri`. See *Architecture* for the file map.
 - 🧩 New QML component: add the file to `qml/` **and** to `qml.qrc`. Use `Theme.*` for colors and fonts, never a local id named `palette` (`Item.palette` shadows it inside delegates).
 - 📜 New numeric edit parameter: add one row to the `kFields` table in `src/editrecipe.cpp` (QML key, JSON op/field, range, default), render it in `ImageEngine::apply`, add a `ParamSlider { key: … }` in `qml/Editor.qml` and a label in `ImageEditor::labelFor`, and add a test. Unknown ops are ignored when reading, so older Ghostframe builds can still open newer recipes.
