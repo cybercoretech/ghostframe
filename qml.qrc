@@ -15,6 +15,7 @@
         <file alias="LutPanel.qml">qml/LutPanel.qml</file>
         <file alias="Main.qml">qml/Main.qml</file>
         <file alias="MetaField.qml">qml/MetaField.qml</file>
+        <file alias="MetadataPanel.qml">qml/MetadataPanel.qml</file>
         <file alias="MiniSlider.qml">qml/MiniSlider.qml</file>
         <file alias="ParamSlider.qml">qml/ParamSlider.qml</file>
         <file alias="PhotoCard.qml">qml/PhotoCard.qml</file>

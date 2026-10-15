@@ -1,6 +1,7 @@
 #include "imageeditor.h"
 
 #include "cubelut.h"
+#include "cybermetaclient.h"
 #include "imageengine.h"
 #include "previewprovider.h"
 
@@ -14,7 +15,6 @@
 #include <QSaveFile>
 #include <QStandardPaths>
 #include <QUuid>
-#include <QXmlStreamWriter>
 #include <QtConcurrent/QtConcurrentRun>
 
 namespace {
@@ -94,24 +94,21 @@ ImageEditor::ImageEditor(QObject *parent)
     connect(&m_exportWatcher, &QFutureWatcher<ExportResult>::finished, this, [this] {
         const ExportResult result = m_exportWatcher.result();
         setBusy(false);
-        if (result.session != m_session) { QFile::remove(result.stagingPath); return; }
         if (!result.ok) {
             QFile::remove(result.stagingPath);
             setStatus(result.error.isEmpty() ? "Could not render this export." : result.error.left(220));
             return;
         }
-        if (!QFile::rename(result.stagingPath, result.path)) {
-            QFile::remove(result.stagingPath);
-            setStatus("Could not finalize the export in the Ghostframe Exports folder.");
-            return;
-        }
-        if (!writeCybermeta(result.path, m_pendingTitle, m_pendingCaption, m_pendingTags)) {
-            setStatus("The image exported, but its Cybermeta XMP sidecar could not be written.");
-            emit saved(result.path);
-            return;
-        }
-        setStatus("Export and Cybermeta saved to " + QFileInfo(result.path).absolutePath() + ".");
-        emit saved(result.path);
+        setStatus("Exported to " + QFileInfo(result.path).absolutePath() + " · " + result.notes.join(" · "));
+        emit saved(result.path, result.notes.join(" · "));
+    });
+
+    connect(&m_metadataWatcher, &QFutureWatcher<MetadataResult>::finished, this, [this] {
+        const MetadataResult result = m_metadataWatcher.result();
+        if (result.session != m_session) return;
+        m_metadata = result.summary;
+        m_metadataStatus = result.error;
+        emit metadataChanged();
     });
 }
 
@@ -121,6 +118,7 @@ ImageEditor::~ImageEditor() {
     m_renderWatcher.waitForFinished();
     m_zoomWatcher.waitForFinished();
     m_exportWatcher.waitForFinished();
+    m_metadataWatcher.waitForFinished();
 }
 
 void ImageEditor::setBusy(bool value) { if (m_busy != value) { m_busy = value; emit busyChanged(); } }
@@ -187,6 +185,13 @@ void ImageEditor::openOriginal(const QString &path, const QString &title, const 
     setBusy(true);
     setStatus("Preparing image…");
     const int session = m_session;
+    m_metadataWatcher.setFuture(QtConcurrent::run([session, path] {
+        MetadataResult result;
+        result.session = session;
+        if (!Cybermeta::available()) result.error = "Install cybermeta 0.2+ to read camera metadata.";
+        else result.summary = Cybermeta::summary(path, &result.error);
+        return result;
+    }));
     m_openWatcher.setFuture(QtConcurrent::run([session, path] {
         OpenResult result;
         result.session = session;
@@ -477,6 +482,9 @@ void ImageEditor::cancel() {
     m_sourcePath.clear();
     m_title.clear(); m_hash.clear(); m_folder.clear(); m_originalName.clear();
     m_previewUrl = m_beforeUrl = m_histogramUrl = m_zoomUrl = QUrl();
+    m_metadata.clear();
+    m_metadataStatus.clear();
+    emit metadataChanged();
     m_zoomed = false;
     if (m_cropMode) { m_cropMode = false; emit viewOptionsChanged(); }
     m_zoomRegion = {};
@@ -485,6 +493,10 @@ void ImageEditor::cancel() {
 }
 
 QStringList ImageEditor::lutNames() const { return LutLibrary::names(); }
+QString ImageEditor::cybermetaVersion() const {
+    const QVersionNumber v = Cybermeta::version();
+    return v.isNull() ? QString() : v.toString();
+}
 QString ImageEditor::lutDirectory() const { return LutLibrary::directory(); }
 
 void ImageEditor::applyLook(const QString &name) {
@@ -540,44 +552,6 @@ void ImageEditor::removeTextLayer(int index) {
     applyParameter("textLayers", layers, "Remove text");
 }
 
-bool ImageEditor::writeCybermeta(const QString &path, const QString &title, const QString &caption, const QString &tags) const {
-    QSaveFile file(path + ".xmp");
-    if (!file.open(QIODevice::WriteOnly)) return false;
-    const EditRecipe &r = m_exportRecipe;
-    QXmlStreamWriter xml(&file); xml.setAutoFormatting(true); xml.writeStartDocument();
-    xml.writeStartElement("x:xmpmeta"); xml.writeAttribute("xmlns:x", "adobe:ns:meta/");
-    xml.writeStartElement("rdf:RDF"); xml.writeAttribute("xmlns:rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#");
-    xml.writeStartElement("rdf:Description");
-    xml.writeAttribute("xmlns:dc", "http://purl.org/dc/elements/1.1/");
-    xml.writeAttribute("xmlns:xmp", "http://ns.adobe.com/xap/1.0/");
-    xml.writeAttribute("xmlns:cybermeta", "https://cybercore.tech/ns/cybermeta/1.0/");
-    auto localized = [&xml](const QString &property, const QString &value) {
-        xml.writeStartElement(property); xml.writeStartElement("rdf:Alt"); xml.writeStartElement("rdf:li"); xml.writeAttribute("xml:lang", "x-default"); xml.writeCharacters(value); xml.writeEndElement(); xml.writeEndElement(); xml.writeEndElement();
-    };
-    localized("dc:title", title); localized("dc:description", caption);
-    const QStringList tagList = tags.split(',', Qt::SkipEmptyParts);
-    if (!tagList.isEmpty()) {
-        xml.writeStartElement("dc:subject"); xml.writeStartElement("rdf:Bag");
-        for (const auto &tag : tagList) { xml.writeStartElement("rdf:li"); xml.writeCharacters(tag.trimmed()); xml.writeEndElement(); }
-        xml.writeEndElement(); xml.writeEndElement();
-    }
-    xml.writeTextElement("xmp:CreatorTool", "Ghostframe Cybermeta Editor");
-    xml.writeTextElement("xmp:MetadataDate", QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
-    xml.writeTextElement("cybermeta:version", "1.0");
-    xml.writeTextElement("cybermeta:sourceHash", m_hash); xml.writeTextElement("cybermeta:sourceFolder", m_folder);
-    xml.writeTextElement("cybermeta:sourceFilename", m_originalName);
-    // The full recipe (reopenable); the flat fields below stay for tools that
-    // read sidecars from earlier Ghostframe versions.
-    xml.writeTextElement("cybermeta:recipe", r.toJsonString());
-    xml.writeTextElement("cybermeta:rotation", QString::number(r.rotation));
-    xml.writeTextElement("cybermeta:brightness", QString::number(r.brightness)); xml.writeTextElement("cybermeta:contrast", QString::number(r.contrast));
-    xml.writeTextElement("cybermeta:saturation", QString::number(r.saturation));
-    xml.writeTextElement("cybermeta:crop", r.hasCrop ? QString("%1,%2,%3,%4").arg(r.cropX).arg(r.cropY).arg(r.cropWidth).arg(r.cropHeight) : "none");
-    xml.writeEndElement(); xml.writeEndElement(); xml.writeEndElement(); xml.writeEndDocument();
-    if (xml.hasError()) { file.cancelWriting(); return false; }
-    return file.commit();
-}
-
 void ImageEditor::save(const QString &title, const QString &caption, const QString &tags, const QVariantMap &exportOptions) {
     // A cancelled export may still be finishing; let it clean up first.
     if (!m_ready || m_busy || m_exportWatcher.isRunning()) return;
@@ -606,20 +580,58 @@ void ImageEditor::save(const QString &title, const QString &caption, const QStri
     const QString path = base + "/" + name + "." + format;
     const QString stagingPath = base + "/." + name + "-working." + format;
 
-    m_pendingTitle = title; m_pendingCaption = caption; m_pendingTags = tags;
-    m_exportRecipe = m_recipe;
+    // Metadata. The sidecar (kept next to the export, for you) has the full
+    // record; the copy embedded in the file only carries the source
+    // identity when you chose to keep all metadata.
+    const Cybermeta::Privacy privacy = Cybermeta::privacyFromString(exportOptions.value("privacy", "gps").toString());
+    Cybermeta::XmpContent xmp;
+    xmp.title = title.trimmed();
+    xmp.description = caption.trimmed();
+    for (const QString &tag : tags.split(',', Qt::SkipEmptyParts))
+        if (!tag.trimmed().isEmpty()) xmp.keywords.append(tag.trimmed());
+    xmp.recipe = m_recipe.toJson();
+    Cybermeta::XmpContent sidecar = xmp;
+    sidecar.fields = {{"sourceHash", m_hash}, {"sourceFolder", m_folder}, {"sourceFilename", m_originalName},
+                      {"privacy", exportOptions.value("privacy", "gps").toString()}};
+    if (privacy == Cybermeta::Privacy::Keep) xmp.fields = sidecar.fields;
+
     setBusy(true);
     setStatus("Rendering full-resolution export…");
-    const int session = m_session;
     const QString source = m_sourcePath;
     const EditRecipe recipe = m_recipe;
-    m_exportWatcher.setFuture(QtConcurrent::run([session, source, recipe, stagingPath, path, options] {
+    const QString description = !xmp.description.isEmpty() ? xmp.description : xmp.title;
+    m_exportWatcher.setFuture(QtConcurrent::run([source, recipe, stagingPath, path, options, privacy, xmp, sidecar, description]() mutable {
         ExportResult result;
-        result.session = session;
         result.stagingPath = stagingPath;
         result.path = path;
-        result.ok = ImageEngine::exportImage(source, recipe, stagingPath, options, &result.error)
-                    && QFileInfo(stagingPath).size() > 0;
+        // 1. Camera metadata (EXIF) per the privacy choice, via cybermeta.
+        QString metaError;
+        const bool cybermeta = Cybermeta::available();
+        options.replaceMetadata = true;
+        if (cybermeta) {
+            options.exif = Cybermeta::cleanExif(ImageEngine::readExif(source), privacy, description, &metaError);
+            if (!metaError.isEmpty()) { result.error = "Metadata: " + metaError; return result; }
+            options.xmp = Cybermeta::xmpPacket(xmp, &metaError);
+            result.notes << Cybermeta::privacyLabel(privacy);
+        } else if (privacy == Cybermeta::Privacy::Keep) {
+            options.replaceMetadata = false;  // pass the original through untouched
+            result.notes << "metadata kept (cybermeta not installed)";
+        } else {
+            // Never leak a location: without cybermeta, drop camera metadata entirely.
+            result.notes << "all camera metadata removed (install cybermeta for finer privacy)";
+        }
+        // 2. Pixels.
+        if (!ImageEngine::exportImage(source, recipe, stagingPath, options, &result.error)
+            || QFileInfo(stagingPath).size() == 0)
+            return result;
+        if (!QFile::rename(stagingPath, path)) {
+            result.error = "Could not finalize the export in the Ghostframe Exports folder.";
+            return result;
+        }
+        result.ok = true;
+        // 3. Sidecar next to the export.
+        if (cybermeta && Cybermeta::writeSidecar(path + ".xmp", sidecar, &metaError)) result.notes << "XMP sidecar";
+        else result.notes << "no XMP sidecar" + (metaError.isEmpty() ? QString() : " (" + metaError + ")");
         return result;
     }));
 }

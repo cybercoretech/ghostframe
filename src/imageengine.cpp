@@ -555,6 +555,34 @@ VImage fitToSize(const VImage &image, const ExportOptions &o) {
     return back.insert(front, left, top);
 }
 
+QByteArray readExif(const QString &path) {
+    try {
+        const VImage header = VImage::new_from_file(path.toUtf8().constData());
+        if (header.get_typeof("exif-data") == 0) return {};
+        size_t length = 0;
+        const void *data = header.get_blob("exif-data", &length);
+        return QByteArray(static_cast<const char *>(data), qsizetype(length));
+    } catch (const vips::VError &) {
+        return {};
+    }
+}
+
+// Drops every inherited metadata item that could leak (EXIF blob and its
+// parsed exif-* fields, XMP, IPTC), then attaches the given blocks.
+VImage replaceMetadata(const VImage &image, const QByteArray &exif, const QByteArray &xmp) {
+    VImage out = image.copy();
+    gchar **fields = vips_image_get_fields(out.get_image());
+    for (gchar **f = fields; f && *f; ++f) {
+        const QByteArray name(*f);
+        if (name.startsWith("exif-") || name == "xmp-data" || name == "iptc-data")
+            vips_image_remove(out.get_image(), *f);
+    }
+    g_strfreev(fields);
+    if (!exif.isEmpty()) vips_image_set_blob_copy(out.get_image(), "exif-data", exif.constData(), size_t(exif.size()));
+    if (!xmp.isEmpty()) vips_image_set_blob_copy(out.get_image(), "xmp-data", xmp.constData(), size_t(xmp.size()));
+    return out;
+}
+
 bool exportImage(const QString &source, const EditRecipe &recipe, const QString &destination, QString *error) {
     return exportImage(source, recipe, destination, ExportOptions{}, error);
 }
@@ -563,6 +591,11 @@ bool exportImage(const QString &source, const EditRecipe &recipe, const QString 
                  const ExportOptions &exportOptions, QString *error) {
     try {
         VImage out = fitToSize(apply(loadOriginal(source), recipe), exportOptions);
+        if (exportOptions.replaceMetadata) out = replaceMetadata(out, exportOptions.exif, exportOptions.xmp);
+        // The pixels are already upright (autorot at load). Say so in the
+        // EXIF too, or a kept Orientation tag would make viewers rotate again.
+        out = out.copy();
+        out.set(VIPS_META_ORIENTATION, 1);
         const QString suffix = QFileInfo(destination).suffix().toLower();
         if ((suffix == "jpg" || suffix == "jpeg") && out.has_alpha()) out = out.flatten();
         vips::VOption *options = VImage::option();

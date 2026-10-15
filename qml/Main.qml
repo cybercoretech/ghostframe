@@ -78,7 +78,7 @@ ApplicationWindow {
     }
     Connections {
         target: imageEditor
-        function onSaved(path) { root.notify("Export saved: " + path) }
+        function onSaved(path, details) { root.notify("Export saved: " + path + (details ? "  ·  " + details : "")) }
     }
     Timer { id: noticeTimer; interval: 7000; onTriggered: root.saveNotice = "" }
 

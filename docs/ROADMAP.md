@@ -114,6 +114,25 @@ This is the build plan agreed on 2026-10-14. Each phase ships as **one pull requ
 - ✍️ Title, caption and tags written into the exported file's EXIF/XMP, not only the sidecar.
 - 🔧 **cybermeta repo (its own PR):** an XMP sidecar command and the `cybermeta:` recipe namespace, so Ghostframe's hand-written XMP writer moves into cybermeta as the single source of truth. Install cybermeta on Blackbox.
 
+> ✅ **Delivered (2026-10-14):**
+> - **cybermeta 0.2.0 (cybermeta PR #9):**
+>   - `show --summary` (typed camera/exposure/time/GPS JSON with a map link);
+>   - `xmp write|read` with the `cybermeta:` namespace and recipe;
+>   - reading XMP from JPEG/WebP/PNG, including libvips' compressed `zTXt`.
+> - **Ghostframe (#8):**
+>   - a METADATA panel;
+>   - privacy chips with STRIP GPS by default;
+>   - EXIF cleaned via a JPEG carrier, so it works for every format;
+>   - XMP embedded in the file and a sidecar, both from cybermeta, replacing the internal XML writer;
+>   - ImageDescription set from the caption;
+>   - Orientation always 1;
+>   - a safe fallback without cybermeta.
+> - **Found along the way:**
+>   - libvips re-applies parsed `exif-*` fields on save, so they are now removed explicitly;
+>   - exports with kept EXIF carried a stale Orientation (now fixed for every export);
+>   - little_exif can't edit WebP EXIF (documented in cybermeta).
+> - 60 tests.
+
 ## 🗂️ Phase 4: Library power
 
 - ⭐ Set favorites, ratings (`1`–`5`) and pick/reject (`P` / `X`) from Ghostframe, synced to PhotoPrism. Keyboard culling mode.
@@ -144,7 +163,7 @@ This is the build plan agreed on 2026-10-14. Each phase ships as **one pull requ
 | 0 · Foundation | ✅ done | #5 |
 | 1 · Darkroom | ✅ done | #6 |
 | 2 · Cyber FX | ✅ done | #7 |
-| 3 · Cybermeta | ⏳ next | — |
-| 4 · Library | 🕓 planned | — |
+| 3 · Cybermeta | ✅ done | #8 (+ cybermeta #9) |
+| 4 · Library | ⏳ next | — |
 | 5 · Local edits | 🕓 planned | — |
 | 6 · Shipping | 🕓 planned | — |

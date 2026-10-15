@@ -10,6 +10,7 @@ ColumnLayout {
     property string fit: "fill"
     property string format: ""
     property int quality: 92
+    property string privacy: "gps"
     readonly property var presets: [
         { id: "original", label: "ORIGINAL", w: 0, h: 0 },
         { id: "shorts", label: "SHORTS 9:16", w: 1080, h: 1920 },
@@ -26,7 +27,7 @@ ColumnLayout {
             w = Math.round(imageEditor.displayWidth * s); h = Math.round(imageEditor.displayHeight * s)
         }
         return { preset: preset === "original" ? "" : preset, width: w, height: h, fit: fit,
-                 format: format !== "" ? format : (preset === "web" ? "webp" : ""), quality: quality }
+                 format: format !== "" ? format : (preset === "web" ? "webp" : ""), quality: quality, privacy: privacy }
     }
 
     Layout.fillWidth: true
@@ -64,6 +65,32 @@ ColumnLayout {
         Text { text: "QUALITY"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; Layout.preferredWidth: 62 }
         MiniSlider { id: q; accent: Theme.pink; Layout.fillWidth: true; from: 40; to: 100; stepSize: 1; value: panel.quality; onMoved: panel.quality = value }
         Text { text: panel.quality; color: Theme.cyan; font.family: Theme.mono; font.pixelSize: 9; Layout.preferredWidth: 24 }
+    }
+    Text { text: "PRIVACY"; color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9 }
+    Flow {
+        Layout.fillWidth: true; spacing: 4
+        Repeater {
+            model: [["keep", "KEEP ALL", "The original camera metadata, location included"],
+                    ["gps", "STRIP GPS", "Everything except where the photo was taken (default)"],
+                    ["anonymous", "ANONYMOUS", "No location, camera, lens, serials or owner"],
+                    ["all", "STRIP ALL", "No camera metadata at all"]]
+            delegate: Chip {
+                required property var modelData
+                text: modelData[1]; accent: modelData[0] === "keep" ? Theme.pink : Theme.lime
+                selected: panel.privacy === modelData[0]; onClicked: panel.privacy = modelData[0]
+                ToolTip.visible: hovered; ToolTip.text: modelData[2]
+            }
+        }
+    }
+    Text {
+        visible: panel.privacy === "keep" && imageEditor.metadata && imageEditor.metadata.gps
+        text: "⚠ This export will include the photo's location."
+        color: Theme.pink; font.family: Theme.sans; font.pixelSize: 9
+    }
+    Text {
+        visible: imageEditor.cybermetaVersion === ""
+        text: "cybermeta isn't installed: exports drop all camera metadata (no location leaks), and there's no XMP. See the README."
+        color: Theme.muted; font.family: Theme.sans; font.pixelSize: 9; wrapMode: Text.Wrap; Layout.fillWidth: true
     }
     Text {
         text: {

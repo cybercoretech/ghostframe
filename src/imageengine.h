@@ -76,7 +76,16 @@ struct ExportOptions {
     enum Fit { Fill, FitBlur, FitPad } fit = Fill;
     QString padColor = QStringLiteral("080a0d");
     int quality = 0;  // JPEG / WebP / AVIF quality; 0 = 95
+    // Metadata: by default the original's EXIF/XMP/IPTC pass through. With
+    // replaceMetadata, all of it is dropped (including the exif-* fields
+    // libvips parsed at load, which it would otherwise write back) and
+    // replaced by these blocks; empty = none.
+    bool replaceMetadata = false;
+    QByteArray exif, xmp;
 };
+
+// The original's raw EXIF block (empty if it has none). Header-only read.
+QByteArray readExif(const QString &path);
 
 // Renders the recipe on the full-resolution original, resizes per `options`
 // and writes `destination`; the format comes from its suffix (jpg, png,
