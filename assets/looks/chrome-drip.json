@@ -1,0 +1,1 @@
+{"name":"Chrome Drip","recipe":{"version":1,"ops":[{"op":"vibrance","amount":25},{"op":"pixelSort","amount":45,"vertical":true},{"op":"bloom","amount":20,"threshold":70,"radius":18}]}}

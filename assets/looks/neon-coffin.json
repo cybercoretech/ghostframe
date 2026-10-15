@@ -1,0 +1,1 @@
+{"name":"Neon Coffin","recipe":{"version":1,"ops":[{"op":"brightnessContrast","brightness":0,"contrast":20},{"op":"gradientMap","amount":45,"name":"Neon Coffin","colors":["05010a","3a0a5e","ff36a8","35f4ff","f4f4ff"]},{"op":"bloom","amount":40,"threshold":62,"radius":28},{"op":"grain","amount":18,"size":1.5},{"op":"vignette","amount":-50,"midpoint":40}]}}

@@ -60,6 +60,7 @@ Rectangle {
 
                 ScrollView {
                     id: panel
+                    objectName: "editorPanel"
                     Layout.preferredWidth: 340; Layout.fillHeight: true; clip: true
                     contentWidth: availableWidth
                     ColumnLayout {
@@ -74,6 +75,12 @@ Rectangle {
                         Text {
                             text: imageEditor.ready ? imageEditor.displayWidth + " × " + imageEditor.displayHeight + " px  ·  " + imageEditor.lastRenderMs + " ms" : "—"
                             color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9
+                        }
+
+                        // ── looks ──
+                        Section {
+                            title: "LOOKS"; accent: Theme.cyan
+                            LookPanel { Layout.fillWidth: true }
                         }
 
                         // ── transform ──
@@ -172,6 +179,52 @@ Rectangle {
                             Text { text: "Use 1:1 zoom (Z) to judge detail."; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 9 }
                         }
 
+                        // ── cyber fx ──
+                        Section {
+                            title: "CYBERGRID GRADIENT"; accent: Theme.pink
+                            CyberGridPanel { Layout.fillWidth: true }
+                        }
+                        Section {
+                            title: "FX"; accent: Theme.pink
+                            resetKeys: ["bloomAmount", "bloomThreshold", "bloomRadius", "aberrationAmount", "glitchAmount", "glitchSeed",
+                                        "pixelSortAmount", "pixelSortVertical", "halftoneAmount", "halftoneSize", "scanlineAmount",
+                                        "scanlineSpacing", "grainAmount", "grainSize", "vignetteAmount", "vignetteMidpoint"]
+                            ParamSlider { key: "bloomAmount"; label: "NEON BLOOM"; from: 0; to: 100; accent: Theme.pink }
+                            ParamSlider { key: "bloomThreshold"; label: "BLOOM THRESHOLD"; from: 0; to: 100; defaultValue: 70; accent: Theme.pink; visible: (imageEditor.recipe.bloomAmount || 0) > 0 }
+                            ParamSlider { key: "bloomRadius"; label: "BLOOM RADIUS"; from: 1; to: 120; defaultValue: 20; suffix: " px"; accent: Theme.pink; visible: (imageEditor.recipe.bloomAmount || 0) > 0 }
+                            ParamSlider { key: "aberrationAmount"; label: "CHROMATIC ABERRATION"; from: 0; to: 100 }
+                            ParamSlider { key: "glitchAmount"; label: "GLITCH"; from: 0; to: 100 }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                visible: (imageEditor.recipe.glitchAmount || 0) > 0
+                                Text { text: "SEED " + Math.round(imageEditor.recipe.glitchSeed || 0); color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9; Layout.fillWidth: true }
+                                Chip { text: "↻ RESEED"; onClicked: imageEditor.applyParameter("glitchSeed", Math.floor(Math.random() * 1000), "Glitch seed") }
+                            }
+                            ParamSlider { key: "pixelSortAmount"; label: "PIXEL SORT"; from: 0; to: 100; accent: Theme.lime }
+                            RowLayout {
+                                visible: (imageEditor.recipe.pixelSortAmount || 0) > 0
+                                Chip { text: "↔ ROWS"; accent: Theme.lime; selected: !imageEditor.recipe.pixelSortVertical; onClicked: imageEditor.applyParameter("pixelSortVertical", false, "Pixel sort rows") }
+                                Chip { text: "↕ COLUMNS"; accent: Theme.lime; selected: imageEditor.recipe.pixelSortVertical === true; onClicked: imageEditor.applyParameter("pixelSortVertical", true, "Pixel sort columns") }
+                            }
+                            ParamSlider { key: "halftoneAmount"; label: "HALFTONE"; from: 0; to: 100; accent: Theme.lime }
+                            ParamSlider { key: "halftoneSize"; label: "DOT SIZE"; from: 3; to: 60; defaultValue: 8; suffix: " px"; accent: Theme.lime; visible: (imageEditor.recipe.halftoneAmount || 0) > 0 }
+                            ParamSlider { key: "scanlineAmount"; label: "SCANLINES"; from: 0; to: 100 }
+                            ParamSlider { key: "scanlineSpacing"; label: "LINE SPACING"; from: 2; to: 24; defaultValue: 4; suffix: " px"; visible: (imageEditor.recipe.scanlineAmount || 0) > 0 }
+                            ParamSlider { key: "grainAmount"; label: "FILM GRAIN"; from: 0; to: 100 }
+                            ParamSlider { key: "grainSize"; label: "GRAIN SIZE"; from: 0.5; to: 4; stepSize: 0.1; decimals: 1; defaultValue: 1.5; suffix: " px"; visible: (imageEditor.recipe.grainAmount || 0) > 0 }
+                            ParamSlider { key: "vignetteAmount"; label: "VIGNETTE" }
+                            ParamSlider { key: "vignetteMidpoint"; label: "VIGNETTE MIDPOINT"; from: 0; to: 100; defaultValue: 50; visible: (imageEditor.recipe.vignetteAmount || 0) !== 0 }
+                        }
+                        Section {
+                            title: "LUT"; expanded: false
+                            resetKeys: ["lutName", "lutAmount"]
+                            LutPanel { Layout.fillWidth: true }
+                        }
+                        Section {
+                            title: "TEXT & WATERMARK"; accent: Theme.cyan
+                            TextLayersPanel { Layout.fillWidth: true }
+                        }
+
                         // ── history ──
                         Section {
                             title: "HISTORY"; expanded: false
@@ -197,17 +250,18 @@ Rectangle {
 
                         // ── cybermeta + export ──
                         Section {
-                            title: "CYBERMETA"; accent: Theme.pink
+                            title: "CYBERMETA + EXPORT"; accent: Theme.lime
                             MetaField { id: metaTitle; Layout.fillWidth: true; text: imageEditor.sourceTitle; placeholderText: "Title" }
                             MetaField { id: metaCaption; Layout.fillWidth: true; placeholderText: "Caption / description" }
                             MetaField { id: metaTags; Layout.fillWidth: true; placeholderText: "Tags, separated by commas" }
                             Text { text: "Writes an XMP sidecar with the source hash, folder, the full edit recipe, title, caption and tags. Edits are also remembered per photo."; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 9; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                            ExportPanel { id: exportPanel; Layout.fillWidth: true }
                             EditorButton {
                                 Layout.fillWidth: true; Layout.preferredHeight: 42
                                 text: imageEditor.busy ? "WORKING…" : "SAVE EXPORT + CYBERMETA"
                                 accent: Theme.lime
                                 enabled: imageEditor.ready && !imageEditor.busy
-                                onClicked: imageEditor.save(metaTitle.text, metaCaption.text, metaTags.text)
+                                onClicked: imageEditor.save(metaTitle.text, metaCaption.text, metaTags.text, exportPanel.options())
                             }
                             EditorButton { text: "RESET ALL EDITS"; primary: false; accent: Theme.pink; Layout.fillWidth: true; enabled: imageEditor.ready; onClicked: imageEditor.resetEdits() }
                         }

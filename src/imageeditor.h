@@ -2,6 +2,7 @@
 
 #include "edithistory.h"
 #include "editrecipe.h"
+#include "looklibrary.h"
 #include "recipestore.h"
 
 #include <QFutureWatcher>
@@ -59,6 +60,9 @@ class ImageEditor final : public QObject {
     Q_PROPERTY(bool zoomed READ zoomed NOTIFY zoomChanged)
     Q_PROPERTY(QUrl zoomUrl READ zoomUrl NOTIFY zoomChanged)
     Q_PROPERTY(QRectF zoomRegion READ zoomRegion NOTIFY zoomChanged)
+    Q_PROPERTY(QVariantList looks READ looks NOTIFY looksChanged)
+    Q_PROPERTY(QStringList lutNames READ lutNames NOTIFY lutsChanged)
+    Q_PROPERTY(QString lutDirectory READ lutDirectory CONSTANT)
 public:
     explicit ImageEditor(QObject *parent = nullptr);
     ~ImageEditor() override;
@@ -68,6 +72,8 @@ public:
     void setExportDirectory(const QString &path) { m_exportDir = path; }
     // Defaults to <AppData>/recipes.
     void setRecipeStore(const RecipeStore &store) { m_store = store; }
+    // Defaults to <AppData>/looks.
+    void setLookLibrary(const LookLibrary &looks) { m_looks = looks; emit looksChanged(); }
 
     QUrl previewUrl() const { return m_previewUrl; }
     QUrl beforeUrl() const { return m_beforeUrl; }
@@ -107,6 +113,9 @@ public:
     bool zoomed() const { return m_zoomed; }
     QUrl zoomUrl() const { return m_zoomUrl; }
     QRectF zoomRegion() const { return m_zoomRegion; }
+    QVariantList looks() const { return m_looks.list(); }
+    QStringList lutNames() const;
+    QString lutDirectory() const;
 
     // Opens a working copy downloaded by PhotoService; the editor deletes it
     // when the edit session ends. A remembered edit for `hash` is restored.
@@ -143,7 +152,24 @@ public:
     // through the engine's own interpolation, for drawing the curve editor.
     Q_INVOKABLE QVariantList curveSamples(const QString &key, int count) const;
 
-    Q_INVOKABLE void save(const QString &title, const QString &caption, const QString &tags);
+    // Looks: apply keeps this photo's geometry and text layers.
+    Q_INVOKABLE void applyLook(const QString &name);
+    Q_INVOKABLE bool saveLook(const QString &name);
+    Q_INVOKABLE void deleteLook(const QString &name);
+    // Copies a .cube file into the LUT library and selects it.
+    Q_INVOKABLE void importLut(const QUrl &file);
+    Q_INVOKABLE void refreshLuts() { emit lutsChanged(); }
+
+    // Text layers (the whole list is one recipe parameter).
+    Q_INVOKABLE void addTextLayer(const QString &text);
+    Q_INVOKABLE void setTextLayer(int index, const QString &field, const QVariant &value, bool commit);
+    Q_INVOKABLE void removeTextLayer(int index);
+
+    // `exportOptions`: {preset (file-name suffix), width, height,
+    // fit: "fill" | "blur" | "pad", format: "" (as source) | jpg | png |
+    // webp | avif, quality: 1..100}. Empty = full size, source format.
+    Q_INVOKABLE void save(const QString &title, const QString &caption, const QString &tags,
+                          const QVariantMap &exportOptions = {});
     Q_INVOKABLE void cancel();
 
 signals:
@@ -156,6 +182,8 @@ signals:
     void historyChanged();
     void viewOptionsChanged();
     void zoomChanged();
+    void looksChanged();
+    void lutsChanged();
     void saved(const QString &path);
     void closeRequested();
 
@@ -183,6 +211,7 @@ private:
 
     PreviewProvider *m_provider = nullptr;
     RecipeStore m_store;
+    LookLibrary m_looks;
     QString m_storeKey, m_lastLabel;
     QString m_sourcePath, m_title, m_hash, m_folder, m_originalName, m_status;
     QString m_pendingTitle, m_pendingCaption, m_pendingTags;
