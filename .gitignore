@@ -4,7 +4,7 @@
 /*.o
 /moc_predefs.h
 /moc_*.cpp
-/qml_Main_qml.cpp
+/qml_*_qml.cpp
 /qmlcache_loader.cpp
 /qrc_*.cpp
 /qml_qmlcache.qrc
@@ -15,3 +15,13 @@ deploy/.env
 deploy/database/
 deploy/storage/
 deploy/originals/
+
+# Test build output (tests/tests.pro)
+/tests/Makefile
+/tests/.qmake.stash
+/tests/tst_ghostframe
+/tests/*.o
+/tests/moc_*.cpp
+/tests/moc_predefs.h
+/tests/*.moc
+/tests/target_wrapper.sh

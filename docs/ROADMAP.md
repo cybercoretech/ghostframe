@@ -4,7 +4,7 @@
 
 This is the build plan agreed on 2026-10-14. Each phase ships as **one pull request**, and PRs are not stacked: a phase starts from `main` after the previous one merges. Every phase PR also updates this file, the README, the Wiki page (`~/Wiki/src/desktop/ghostframe.md`) and the Blackbox Notes project note.
 
-> ⚡ **Order:** Phase 0 → Phase 1 first (make the editor feel great), then Cyber FX, Cybermeta, library features, local edits, packaging.
+> ⚡ **Order:** Phase 0 ✅ → Phase 1 first (make the editor feel great), then Cyber FX, Cybermeta, library features, local edits, packaging.
 
 ---
 
@@ -49,6 +49,14 @@ This is the build plan agreed on 2026-10-14. Each phase ships as **one pull requ
 - 📦 `ghostframe.pro` links `vips-cpp` via `pkg-config`; the README requirements are updated.
 
 **Done when:** the current editor features run on the new engine, preview updates in well under 100 ms on the proxy, ImageMagick is no longer required for basic editing, and undo/redo works.
+
+> ✅ **Delivered (2026-10-14):**
+> - 16 QML files plus a `Theme` singleton.
+> - `ImageEngine` on libvips, with a ~15 ms preview render on a proxy of a 6000×4000 image.
+> - Recipe v1 (`rotate`, `crop`, `brightnessContrast`, `saturation`) and undo/redo; one slider drag is one step.
+> - 21 Qt tests, including pixel values checked against ImageMagick 7.1 and a full editor-to-export session.
+> - ImageMagick is no longer a dependency.
+> - Also fixed: cropping again on an already-cropped preview now maps to the right region, and downloaded working copies are deleted when the editor closes.
 
 ## 🎛️ Phase 1: Darkroom (the editor)
 
@@ -105,8 +113,8 @@ This is the build plan agreed on 2026-10-14. Each phase ships as **one pull requ
 
 | Phase | Status | PR |
 |---|---|---|
-| 0 · Foundation | ⏳ next | — |
-| 1 · Darkroom | 🕓 planned | — |
+| 0 · Foundation | ✅ done | #5 |
+| 1 · Darkroom | ⏳ next | — |
 | 2 · Cyber FX | 🕓 planned | — |
 | 3 · Cybermeta | 🕓 planned | — |
 | 4 · Library | 🕓 planned | — |
