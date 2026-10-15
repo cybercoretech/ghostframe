@@ -77,6 +77,12 @@ Rectangle {
                             color: Theme.muted; font.family: Theme.mono; font.pixelSize: 9
                         }
 
+                        // ── metadata ──
+                        Section {
+                            title: "METADATA"; accent: Theme.cyan
+                            MetadataPanel { Layout.fillWidth: true }
+                        }
+
                         // ── looks ──
                         Section {
                             title: "LOOKS"; accent: Theme.cyan
@@ -254,7 +260,7 @@ Rectangle {
                             MetaField { id: metaTitle; Layout.fillWidth: true; text: imageEditor.sourceTitle; placeholderText: "Title" }
                             MetaField { id: metaCaption; Layout.fillWidth: true; placeholderText: "Caption / description" }
                             MetaField { id: metaTags; Layout.fillWidth: true; placeholderText: "Tags, separated by commas" }
-                            Text { text: "Writes an XMP sidecar with the source hash, folder, the full edit recipe, title, caption and tags. Edits are also remembered per photo."; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 9; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                            Text { text: "Title, caption and tags go inside the exported file (XMP, plus the caption as EXIF description) and into a .xmp sidecar with the source and the full edit recipe, all written by cybermeta. Edits are also remembered per photo."; color: Theme.muted; font.family: Theme.sans; font.pixelSize: 9; wrapMode: Text.Wrap; Layout.fillWidth: true }
                             ExportPanel { id: exportPanel; Layout.fillWidth: true }
                             EditorButton {
                                 Layout.fillWidth: true; Layout.preferredHeight: 42

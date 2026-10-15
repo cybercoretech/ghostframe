@@ -1,6 +1,7 @@
 // Engine, recipe and history tests. Fixture images are generated at runtime,
 // so no binary samples live in the repo.
 #include "cubelut.h"
+#include "cybermetaclient.h"
 #include "cybergrid.h"
 #include "edithistory.h"
 #include "fx.h"
@@ -16,6 +17,7 @@
 #include <QImage>
 #include <QDir>
 #include <QJsonDocument>
+#include <QProcess>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -35,6 +37,29 @@ QString writeFixture(const QString &dir, const QString &name = "fixture.png", QS
             image.setPixelColor(x, y, QColor(x * 255 / (size.width() - 1), y * 255 / (size.height() - 1), 96));
     const QString path = dir + "/" + name;
     if (!image.save(path)) qFatal("could not write fixture %s", qPrintable(path));
+    return path;
+}
+
+// exiftool output for these tags (for checking exports independently of cybermeta).
+QString exiftool(const QStringList &args) {
+    QProcess p;
+    p.start("exiftool", args);
+    p.waitForFinished(20000);
+    return QString::fromUtf8(p.readAllStandardOutput());
+}
+bool haveExiftool() { return !QStandardPaths::findExecutable("exiftool").isEmpty(); }
+
+// A JPEG with camera, owner and GPS metadata (and optionally a rotation).
+QString writeCameraJpeg(const QString &dir, const QString &name, int orientation = 1) {
+    QImage image(300, 200, QImage::Format_RGB888);
+    image.fill(QColor(90, 120, 160));
+    for (int x = 0; x < 30; ++x) for (int y = 0; y < 30; ++y) image.setPixelColor(x, y, Qt::red);  // top-left marker
+    const QString path = dir + "/" + name;
+    image.save(path, "JPG", 95);
+    exiftool({"-q", "-overwrite_original", "-Make=Fujifilm", "-Model=X-T5", "-LensModel=XF23mm", "-FNumber=2.8",
+              "-ExposureTime=1/250", "-ISO=400", "-Artist=Raven", "-DateTimeOriginal=2026:10:01 21:14:05",
+              "-GPSLatitude=45.5152", "-GPSLatitudeRef=N", "-GPSLongitude=122.6784", "-GPSLongitudeRef=W",
+              QString("-Orientation#=%1").arg(orientation), path});
     return path;
 }
 
@@ -887,6 +912,131 @@ private slots:
         const QString path = saved.first().first().toString();
         QVERIFY(path.contains("-Ghostframe-shorts-") && path.endsWith(".webp"));
         QCOMPARE(ImageEngine::sourceSize(path), QSize(1080, 1920));
+        editor.cancel();
+    }
+
+    // ── Phase 3: cybermeta ─────────────────────────────────────────────
+    void cybermetaSummary() {
+        if (!Cybermeta::available()) QSKIP("cybermeta 0.2+ not installed");
+        if (!haveExiftool()) QSKIP("exiftool not installed");
+        const QString photo = writeCameraJpeg(m_dir.path(), "camera.jpg");
+        QString error;
+        const QVariantMap summary = Cybermeta::summary(photo, &error);
+        QVERIFY2(!summary.isEmpty(), qPrintable(error));
+        QCOMPARE(summary.value("camera").toString(), QString("Fujifilm X-T5"));
+        QCOMPARE(summary.value("shutter").toString(), QString("1/250 s"));
+        QCOMPARE(summary.value("iso").toInt(), 400);
+        const QVariantMap gps = summary.value("gps").toMap();
+        QVERIFY(std::abs(gps.value("latitude").toDouble() - 45.5152) < 1e-3);
+        QVERIFY(gps.value("longitude").toDouble() < 0);
+        QVERIFY(gps.value("map_url").toString().startsWith("https://www.openstreetmap.org/"));
+    }
+
+    void exportPrivacyAndEmbeddedMetadata_data() {
+        QTest::addColumn<QString>("privacy");
+        QTest::addColumn<QString>("format");
+        QTest::addColumn<bool>("gps");
+        QTest::addColumn<QString>("make");
+        QTest::newRow("keep") << "keep" << "jpg" << true << "Fujifilm";
+        QTest::newRow("strip gps (default)") << "gps" << "jpg" << false << "Fujifilm";
+        QTest::newRow("anonymous") << "anonymous" << "jpg" << false << "Generic";
+        QTest::newRow("strip all") << "all" << "jpg" << false << "";
+        QTest::newRow("webp strip gps") << "gps" << "webp" << false << "Fujifilm";
+        QTest::newRow("png strip gps") << "gps" << "png" << false << "Fujifilm";
+    }
+
+    void exportPrivacyAndEmbeddedMetadata() {
+        QFETCH(QString, privacy);
+        QFETCH(QString, format);
+        QFETCH(bool, gps);
+        QFETCH(QString, make);
+        if (!Cybermeta::available()) QSKIP("cybermeta 0.2+ not installed");
+        if (!haveExiftool()) QSKIP("exiftool not installed");
+        const QString photo = writeCameraJpeg(m_dir.path(), "privacy-src.jpg");
+        ImageEditor editor;
+        editor.setRecipeStore(RecipeStore(m_dir.path() + "/p3-recipes"));
+        const QString exports = m_dir.path() + "/p3-" + privacy + "-" + format;
+        editor.setExportDirectory(exports);
+        editor.openLocalFile(photo);
+        QTRY_VERIFY(editor.ready());
+        editor.setParameter("exposure", 0.3);
+        editor.commitEdit();
+        QSignalSpy saved(&editor, &ImageEditor::saved);
+        editor.save("Harrow Point", "Late returns", "neon, night", QVariantMap{{"privacy", privacy}, {"format", format}});
+        QTRY_VERIFY2_WITH_TIMEOUT(saved.count() == 1, qPrintable(editor.status()), 20000);
+        const QString out = saved.first().first().toString();
+
+        // Camera metadata, checked with exiftool.
+        const QString tags = exiftool({"-s", "-GPSLatitude", "-Make", "-ImageDescription", "-Orientation", out});
+        QCOMPARE(tags.contains("GPSLatitude"), gps);
+        if (make.isEmpty()) QVERIFY2(!tags.contains("Make"), qPrintable(tags));
+        else QVERIFY2(tags.contains(": " + make), qPrintable(tags));
+        QVERIFY2(tags.contains("Late returns"), qPrintable(tags));  // caption → EXIF ImageDescription, in every mode
+
+        // Embedded XMP (read back by cybermeta), and the sidecar.
+        QProcess read;
+        read.start(Cybermeta::executable(), {"xmp", "read", out});
+        QVERIFY(read.waitForFinished(20000));
+        const QJsonObject embedded = QJsonDocument::fromJson(read.readAllStandardOutput()).object();
+        QCOMPARE(embedded.value("title").toString(), QString("Harrow Point"));
+        QCOMPARE(embedded.value("keywords").toArray().size(), 2);
+        QVERIFY(embedded.value("recipe").toObject().contains("ops"));
+        // Source identity only travels inside the file when keeping everything.
+        QCOMPARE(embedded.value("fields").toObject().contains("sourceFolder"), privacy == "keep");
+        QVERIFY(QFileInfo::exists(out + ".xmp"));
+        QVERIFY(QFileInfo::exists(out + ".xmp") && QFile(out + ".xmp").size() > 0);
+        read.start(Cybermeta::executable(), {"xmp", "read", out + ".xmp"});
+        QVERIFY(read.waitForFinished(20000));
+        const QJsonObject side = QJsonDocument::fromJson(read.readAllStandardOutput()).object();
+        QCOMPARE(side.value("fields").toObject().value("privacy").toString(), privacy);
+        QVERIFY(side.value("fields").toObject().contains("sourceFilename"));
+        QVERIFY(saved.first().at(1).toString().contains(Cybermeta::privacyLabel(Cybermeta::privacyFromString(privacy))));
+        editor.cancel();
+    }
+
+    void exportKeepsOrientationRight() {
+        if (!Cybermeta::available()) QSKIP("cybermeta 0.2+ not installed");
+        if (!haveExiftool()) QSKIP("exiftool not installed");
+        const QString photo = writeCameraJpeg(m_dir.path(), "rotated.jpg", 6);  // shown rotated 90° clockwise
+        QCOMPARE(ImageEngine::sourceSize(photo), QSize(200, 300));
+        for (const char *privacy : {"keep", "gps"}) {
+            ImageEditor editor;
+            editor.setRecipeStore(RecipeStore(m_dir.path() + "/p3o-recipes"));
+            editor.setExportDirectory(m_dir.path() + "/p3-orientation-" + privacy);
+            editor.openLocalFile(photo);
+            QTRY_VERIFY(editor.ready());
+            QSignalSpy saved(&editor, &ImageEditor::saved);
+            editor.save("", "", "", QVariantMap{{"privacy", privacy}});
+            QTRY_VERIFY2_WITH_TIMEOUT(saved.count() == 1, qPrintable(editor.status()), 20000);
+            const QString out = saved.first().first().toString();
+            // Pixels are upright and nothing asks viewers to rotate them again.
+            const VImage raw = VImage::new_from_file(out.toUtf8().constData());
+            QCOMPARE(QSize(raw.width(), raw.height()), QSize(200, 300));
+            QCOMPARE(ImageEngine::sourceSize(out), QSize(200, 300));
+            QVERIFY(pixel(raw, 190, 5)[0] > 200);  // the red marker is now top-right
+            editor.cancel();
+        }
+    }
+
+    void exportWithoutCybermetaNeverLeaksLocation() {
+        if (!haveExiftool()) QSKIP("exiftool not installed");
+        const QString photo = writeCameraJpeg(m_dir.path(), "nocm.jpg");
+        qputenv("GHOSTFRAME_CYBERMETA", "/nonexistent/cybermeta");
+        QVERIFY(!Cybermeta::available());
+        ImageEditor editor;
+        editor.setRecipeStore(RecipeStore(m_dir.path() + "/p3n-recipes"));
+        editor.setExportDirectory(m_dir.path() + "/p3-nocm");
+        editor.openLocalFile(photo);
+        QTRY_VERIFY(editor.ready());
+        QTRY_VERIFY(!editor.metadataStatus().isEmpty());  // explains why there's no metadata panel
+        QSignalSpy saved(&editor, &ImageEditor::saved);
+        editor.save("t", "", "", QVariantMap{{"privacy", "gps"}});
+        QTRY_VERIFY2_WITH_TIMEOUT(saved.count() == 1, qPrintable(editor.status()), 20000);
+        const QString out = saved.first().first().toString();
+        qunsetenv("GHOSTFRAME_CYBERMETA");
+        QVERIFY(!exiftool({"-s", "-GPSLatitude", "-Make", out}).contains("GPS"));
+        QVERIFY(saved.first().at(1).toString().contains("install cybermeta"));
+        QVERIFY(!QFileInfo::exists(out + ".xmp"));
         editor.cancel();
     }
 

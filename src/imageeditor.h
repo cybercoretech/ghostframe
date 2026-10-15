@@ -63,6 +63,12 @@ class ImageEditor final : public QObject {
     Q_PROPERTY(QVariantList looks READ looks NOTIFY looksChanged)
     Q_PROPERTY(QStringList lutNames READ lutNames NOTIFY lutsChanged)
     Q_PROPERTY(QString lutDirectory READ lutDirectory CONSTANT)
+    // Camera metadata of the open photo from `cybermeta show --summary`
+    // (camera, lens, shutter, iso, captured, gps {latitude, longitude,
+    // map_url}, …); metadataStatus explains an empty map.
+    Q_PROPERTY(QVariantMap metadata READ metadata NOTIFY metadataChanged)
+    Q_PROPERTY(QString metadataStatus READ metadataStatus NOTIFY metadataChanged)
+    Q_PROPERTY(QString cybermetaVersion READ cybermetaVersion CONSTANT)
 public:
     explicit ImageEditor(QObject *parent = nullptr);
     ~ImageEditor() override;
@@ -114,6 +120,9 @@ public:
     QUrl zoomUrl() const { return m_zoomUrl; }
     QRectF zoomRegion() const { return m_zoomRegion; }
     QVariantList looks() const { return m_looks.list(); }
+    QVariantMap metadata() const { return m_metadata; }
+    QString metadataStatus() const { return m_metadataStatus; }
+    QString cybermetaVersion() const;
     QStringList lutNames() const;
     QString lutDirectory() const;
 
@@ -167,7 +176,10 @@ public:
 
     // `exportOptions`: {preset (file-name suffix), width, height,
     // fit: "fill" | "blur" | "pad", format: "" (as source) | jpg | png |
-    // webp | avif, quality: 1..100}. Empty = full size, source format.
+    // webp | avif, quality: 1..100, privacy: "keep" | "gps" (default) |
+    // "anonymous" | "all"}. Empty = full size, source format, no GPS.
+    // Title, caption and tags are embedded in the file (XMP; caption also
+    // as EXIF ImageDescription) and written to a .xmp sidecar, by cybermeta.
     Q_INVOKABLE void save(const QString &title, const QString &caption, const QString &tags,
                           const QVariantMap &exportOptions = {});
     Q_INVOKABLE void cancel();
@@ -184,7 +196,9 @@ signals:
     void zoomChanged();
     void looksChanged();
     void lutsChanged();
-    void saved(const QString &path);
+    void metadataChanged();
+    // `details`: what happened to the metadata, e.g. "location removed · XMP sidecar".
+    void saved(const QString &path, const QString &details);
     void closeRequested();
 
 private:
@@ -196,7 +210,8 @@ private:
         QImage preview, before, histogram; QSize size; int milliseconds = 0; QString error;
     };
     struct ZoomResult { int session = 0; bool ok = false; vips::VImage original; QImage image; QRectF region; QString error; };
-    struct ExportResult { int session = 0; bool ok = false; QString stagingPath, path, error; };
+    struct ExportResult { bool ok = false; QString stagingPath, path, error; QStringList notes; };
+    struct MetadataResult { int session = 0; QVariantMap summary; QString error; };
 
     void setRecipe(const EditRecipe &recipe, bool commit, const QString &label = QString());
     void persist();
@@ -206,7 +221,6 @@ private:
     QSize outputSize(const EditRecipe &recipe) const;
     void setBusy(bool value);
     void setStatus(const QString &value);
-    bool writeCybermeta(const QString &path, const QString &title, const QString &caption, const QString &tags) const;
     static QString labelFor(const QString &key);
 
     PreviewProvider *m_provider = nullptr;
@@ -214,11 +228,12 @@ private:
     LookLibrary m_looks;
     QString m_storeKey, m_lastLabel;
     QString m_sourcePath, m_title, m_hash, m_folder, m_originalName, m_status;
-    QString m_pendingTitle, m_pendingCaption, m_pendingTags;
+    QVariantMap m_metadata;
+    QString m_metadataStatus;
     QString m_exportDir;
     QUrl m_previewUrl, m_beforeUrl, m_histogramUrl, m_zoomUrl;
     QTimer m_previewTimer, m_zoomTimer;
-    EditRecipe m_recipe, m_exportRecipe;
+    EditRecipe m_recipe;
     EditHistory m_history;
     vips::VImage m_proxy, m_draft, m_original;
     QSize m_sourceSize, m_displaySize, m_zoomViewport;
@@ -228,6 +243,7 @@ private:
     QFutureWatcher<RenderResult> m_renderWatcher;
     QFutureWatcher<ZoomResult> m_zoomWatcher;
     QFutureWatcher<ExportResult> m_exportWatcher;
+    QFutureWatcher<MetadataResult> m_metadataWatcher;
     int m_session = 0, m_revision = 0, m_lastRenderMs = 0;
     bool m_ready = false, m_busy = false, m_renderPending = false, m_zoomPending = false, m_ownsSource = false;
     bool m_showClipping = false, m_showBefore = false, m_zoomed = false, m_cropMode = false;

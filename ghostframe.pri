@@ -11,7 +11,8 @@ SOURCES += $$PWD/src/editrecipe.cpp \
            $$PWD/src/fx.cpp \
            $$PWD/src/cubelut.cpp \
            $$PWD/src/cybergrid.cpp \
-           $$PWD/src/looklibrary.cpp
+           $$PWD/src/looklibrary.cpp \
+           $$PWD/src/cybermetaclient.cpp
 
 HEADERS += $$PWD/src/editrecipe.h \
            $$PWD/src/edithistory.h \
@@ -20,7 +21,8 @@ HEADERS += $$PWD/src/editrecipe.h \
            $$PWD/src/fx.h \
            $$PWD/src/cubelut.h \
            $$PWD/src/cybergrid.h \
-           $$PWD/src/looklibrary.h
+           $$PWD/src/looklibrary.h \
+           $$PWD/src/cybermetaclient.h
 
 RESOURCES += $$PWD/cybergrid.qrc \
              $$PWD/looks.qrc

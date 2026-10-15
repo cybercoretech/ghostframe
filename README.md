@@ -33,7 +33,11 @@ The current client foundation includes:
 - 📤 **Export presets:** YouTube Shorts 9:16 (fill, or fit over a blurred background), 16:9 thumbnail, square, web. Formats are JPG, PNG, WebP and AVIF, with adjustable quality.
 - ↩️ Undo / redo for every edit, with a labelled history list. A slider drag counts as one step.
 - 📜 **Edit recipes:** every edit is a versioned JSON recipe, rendered identically for preview and export, saved with the export, and **remembered per photo**. Reopen a photo (or move to it with `[` / `]`) and your edit is still there.
-- 🧬 Cybermeta sidecars: each export gets an XMP file containing title, caption, tags, source identity, and the full edit recipe (`cybermeta:recipe`). The image and metadata stay portable outside Ghostframe.
+- 🧬 **Cybermeta inside:** metadata goes through the [cybermeta](https://github.com/cybercore-tech/cybermeta) CLI.
+  - A **METADATA** panel shows camera, lens, exposure, capture time and **location with a map link**.
+  - Exports are **private by default**: GPS is stripped, or choose KEEP ALL, ANONYMOUS (no camera identity) or STRIP ALL.
+  - Title, caption and tags are **embedded in the exported file** (XMP, plus EXIF ImageDescription).
+  - A `.xmp` sidecar sits next to each export, with the source identity and the full edit recipe.
 - 📤 Safe exports to `~/Pictures/Ghostframe/Exports/`; the source image stays untouched.
 - 🐧 Native Linux packaging groundwork for Omarchy/Arch.
 
@@ -71,6 +75,8 @@ src/fx.*              Cyber FX + text layers (whole-frame, seeded, scale-aware)
 src/cubelut.*         .cube 3D LUT parser/applier and the LUT library
 src/cybergrid.*       CYBERGRID palette catalog + gradient styles (QML: cybergrid)
 src/looklibrary.*     Built-in and user looks
+src/cybermetaclient.* Bridge to the cybermeta CLI: summary, EXIF privacy
+                      (via a JPEG carrier), XMP packets and sidecars
 assets/cybergrid/     81 palettes synced from cybercore (tools/sync-cybergrid.sh)
 assets/looks/         Built-in looks (JSON recipe fragments)
 src/previewprovider.h image://ghostframe-edit/{preview,before,histogram,zoom}
@@ -109,6 +115,7 @@ This initial design is **self-hosted, not end-to-end encrypted**. PhotoPrism nee
 - ⚡ libvips 8.15 or newer with its C++ binding (`libvips` on Arch; `pkg-config vips-cpp` must work) for the editor. ImageMagick is no longer required.
 - 🔤 Pango (pulled in by libvips) and the JetBrains Mono font (`ttf-jetbrains-mono`) for text layers; other installed fonts work too.
 - 🖼️ For AVIF export, libheif with an AV1 encoder (Arch's `libheif` includes one).
+- 🧬 [cybermeta](https://github.com/cybercore-tech/cybermeta) **0.2 or newer** on `PATH`, `~/.local/bin` or `~/.cargo/bin` (or set `GHOSTFRAME_CYBERMETA`). It powers the metadata panel, export privacy and XMP. Without it, Ghostframe still exports, but drops all camera metadata (so a location can never leak) and writes no XMP.
 
 ## 🚀 Build and run
 
@@ -128,7 +135,7 @@ qmake6 && make -j"$(nproc)"
 QT_QPA_PLATFORM=offscreen ./tst_ghostframe
 ```
 
-The suite (51 cases) generates its fixture images at runtime and runs in Qt's test mode, so it never touches your real settings or remembered edits. It covers:
+The suite (60 cases) generates its fixture images at runtime and runs in Qt's test mode, so it never touches your real settings or remembered edits. It covers:
 
 - the recipe format (every parameter round-trips, unknown ops are ignored, values clamp);
 - curve and tone monotonicity;
@@ -158,6 +165,11 @@ The suite (51 cases) generates its fixture images at runtime and runs in Qt's te
 - CYBERGRID with a custom theme;
 - built-in and user looks;
 - an editor session with a look, text layers and a Shorts WebP export;
+- Phase 3 (needs cybermeta and exiftool, otherwise skipped):
+  - the cybermeta summary;
+  - every privacy mode across JPG, WebP and PNG (GPS, camera identity, caption, embedded XMP, source identity only with KEEP ALL, the sidecar);
+  - rotated originals exporting upright;
+  - exporting without cybermeta never leaking a location;
 - two full editor sessions (draft → full render, labelled history, history jumps, before frame, 1:1 zoom and pan clamping, export + XMP, edits restored on reopen);
 - a speed check.
 
@@ -185,7 +197,24 @@ Open a photo from the library and choose **✎ EDIT IMAGE**. Ghostframe download
 - 🧰 **Toolbar:** ‹ › previous/next photo, **CROP**, **BEFORE** (drag the split), **CLIPPING** (pink = blown highlights, cyan = crushed shadows), **1:1** (real pixels, drag to pan), **UNDO** / **REDO**.
 - 💾 Edits are **remembered per photo** as you work, in `~/.local/share/Cybercore Systems/Ghostframe/recipes/`. Closing the editor or moving to another photo never loses them. **RESET ALL EDITS** (undoable) makes Ghostframe forget them.
 
-**SAVE EXPORT + CYBERMETA** writes a new full-resolution image and a matching `.xmp` sidecar into `~/Pictures/Ghostframe/Exports/`. Ghostframe never writes edits into the original, and it deletes the temporary working copy when you close the editor. The sidecar holds the PhotoPrism source hash and folder, the full recipe as JSON (`cybermeta:recipe`), and the individual values for tools that read older Ghostframe sidecars.
+**SAVE EXPORT + CYBERMETA** writes a new image into `~/Pictures/Ghostframe/Exports/`. Ghostframe never writes edits into the original, and it deletes the temporary working copy when you close the editor.
+
+#### 🛡️ Metadata and privacy
+
+| Privacy chip | Camera metadata (EXIF) in the exported file |
+|---|---|
+| **STRIP GPS** *(default)* | Everything except where the photo was taken |
+| **ANONYMOUS** | No location, camera, lens, serials, owner (cybermeta's `anonymous-camera` preset) |
+| **STRIP ALL** | No camera metadata |
+| **KEEP ALL** | The original, location included (a warning appears if the photo has GPS) |
+
+Whatever you choose:
+
+- 🏷️ **Inside the file:** title, caption and tags as XMP (Dublin Core, which Lightroom, digiKam and darktable read), the caption also as EXIF `ImageDescription`, and the edit recipe. The PhotoPrism source identity (hash, folder, file name) is embedded only with KEEP ALL.
+- 📄 **Next to the file:** a `.xmp` sidecar with everything, including the source identity and the privacy choice, for your own records.
+- 🔄 **Orientation** is always written as upright, because the pixels already are.
+
+How it works: the original's EXIF is copied into a tiny JPEG "carrier", cybermeta strips or anonymises it there, and libvips attaches the cleaned EXIF plus a cybermeta-generated XMP packet to the export. So it behaves the same for JPG, PNG, WebP and AVIF, even though cybermeta can't edit WebP EXIF itself. Every inherited metadata item (the EXIF block *and* the `exif-*` fields libvips parsed, XMP, IPTC) is dropped first, so nothing comes back on save.
 
 ### ⌨️ Keyboard shortcuts
 
@@ -278,7 +307,7 @@ The full phase-by-phase build plan lives in **[docs/ROADMAP.md](docs/ROADMAP.md)
 | 🖌️ | **5 · Local edits** | Masks, heal/clone, layers |
 | 🚀 | **6 · Shipping** | Live CYBERGRID theming, AUR package, project site |
 
-Already done ✅: the Qt Quick shell and PhotoPrism client, the Cybercore theme, authenticated search and thumbnails, the nested folder browser, keyring-free auto-reconnect, and **Phase 0 · Foundation** (component UI, libvips engine, recipes, undo/redo, tests), **Phase 1 · Darkroom** (the full Image Lab above) and **Phase 2 · Cyber FX** (effects, CYBERGRID gradients, LUTs, text, looks, export presets).
+Already done ✅: the Qt Quick shell and PhotoPrism client, the Cybercore theme, authenticated search and thumbnails, the nested folder browser, keyring-free auto-reconnect, and **Phase 0 · Foundation** (component UI, libvips engine, recipes, undo/redo, tests), **Phase 1 · Darkroom** (the full Image Lab above) and **Phase 2 · Cyber FX** (effects, CYBERGRID gradients, LUTs, text, looks, export presets), and **Phase 3 · Cybermeta** (metadata panel, private-by-default exports, embedded XMP and sidecars via cybermeta).
 
 ## 🛠️ Development notes
 
