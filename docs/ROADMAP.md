@@ -15,7 +15,7 @@ This is the build plan agreed on 2026-10-14, extended with the express image edi
 | 🔎 Library | PhotoPrism browse, search, paged grid, nested folder tree. *Recently Added* and *Favorites* use PhotoPrism search filters (`order:newest`, `favorite:true`). |
 | 🔐 Connection | Auto-reconnect from an owner-only local credential file; never touches the desktop keyring. |
 | 🎛️ Editor | In-process libvips darkroom, Cyber FX, LUTs, text overlays, recipes, history, draft/proxy previews and 1:1 zoom. General image layers and masks are still planned. |
-| 🧬 Metadata | [cybermeta](https://github.com/cybercore-tech/cybermeta) 0.2.0 reads metadata and writes embedded XMP plus sidecars. Exports strip GPS by default. |
+| 🧬 Metadata | [cybermeta](https://github.com/cybercoretech/cybermeta) 0.2.0 reads metadata and writes embedded XMP plus sidecars. Exports strip GPS by default. |
 | 📤 Export | Full-resolution render to `~/Pictures/Ghostframe/Exports/`; originals are never modified. |
 | 🧱 Code | Qt Quick components in `qml/`; C++ engine, recipe, history, store and metadata bridge in `src/`. Baseline: 60 passing Qt tests. |
 
