@@ -6,6 +6,8 @@
 
 > ⚡ **Status:** desktop MVP. The client builds and has been verified against the local PhotoPrism API and thumbnail service. Android is deliberately a later project and will live in its own repository.
 
+**[Project site](https://cybercoretech.github.io/ghostframe/)**
+
 ## ✨ What Ghostframe is
 
 Ghostframe is a native Qt Quick desktop client, not a rebranded PhotoPrism web build. PhotoPrism remains the photo catalog, indexer, and AI engine; Ghostframe is the custom browsing experience. Your image files stay in the storage locations you choose, and Ghostframe does not copy or edit originals.
