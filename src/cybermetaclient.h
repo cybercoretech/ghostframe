@@ -8,7 +8,7 @@
 #include <QVariantMap>
 #include <QVersionNumber>
 
-// Ghostframe's bridge to the cybermeta CLI (cybercore-tech/cybermeta), its
+// Ghostframe's bridge to the cybermeta CLI (cybercoretech/cybermeta), its
 // metadata engine. Everything is synchronous and thread-safe: call it from
 // worker threads. Needs cybermeta >= 0.2.0 (show --summary, xmp write).
 namespace Cybermeta {

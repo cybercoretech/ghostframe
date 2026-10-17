@@ -5,19 +5,19 @@ it current: update it in the same PR as any phase or significant change.
 
 ## 📍 Repository state (2026-10-14)
 
-- **Repo:** `cybercore-tech/ghostframe` · local checkout `~/Devspace/Cybercore/core/ghostframe` on Blackbox.
+- **Repo:** `cybercoretech/ghostframe` · local checkout `~/Devspace/Cybercore/core/ghostframe` on Blackbox.
 - **`main`:** `812e2b0` (merge of PR #9, the initial handoff). Phases 0–3 are implemented; PR #9 was merged, not left open. The local `main` was fast-forwarded from `ea53e9c` during this resume.
 - **Roadmap:** [`docs/ROADMAP.md`](docs/ROADMAP.md). The express editor implementation list is now Phase **5A–5E**. User-selected next implementation: **5A · Document and layers**; Phase 4 library decisions remain preserved below. No Phase 4 or 5 implementation has started.
 - **Current work:** documentation-only reconciliation on `docs/editor-expansion-plan`. The earlier `feat/composition-layers` branch contains no implementation commits; start the implementation branch from updated `main` after this planning PR merges.
 - **Tests:** 60 Qt tests, all passing on `main` (the Phase 3 ones need `cybermeta` + `exiftool`; they skip without them).
 - **CI:** none on GitHub yet. Tests run locally only. (Adding a workflow was offered to the user; not decided.)
 - **Installed build:** `~/.local/bin/ghostframe`, built from `main`. Launcher: `~/.local/share/applications/ghostframe.desktop`.
-- **Companion repo:** `cybercore-tech/cybermeta` **0.2.0** (merged PR #9, squash `4d189de`), installed at `~/.local/bin/cybermeta` from its `main`. **Not tagged or released.** Ask the user before tagging, because it publishes release binaries.
+- **Companion repo:** `cybercoretech/cybermeta` **0.2.0** (merged PR #9, squash `4d189de`), installed at `~/.local/bin/cybermeta` from its `main`. **Not tagged or released.** Ask the user before tagging, because it publishes release binaries.
 
 ## ✅ Strict resume checklist
 
 1. Read this file, then [`README.md`](README.md) and [`docs/ROADMAP.md`](docs/ROADMAP.md).
-2. `git status` and `git log --oneline -5` on `main`; check open PRs with `GH_TOKEN=$(gh auth token -u cybercore-tech) gh pr list`.
+2. `git status` and `git log --oneline -5` on `main`; check open PRs with `GH_TOKEN=$(gh auth token -u cybercoretech) gh pr list`.
 3. Build and test before changing anything:
    ```sh
    qmake6 ghostframe.pro && make -j"$(nproc)"
@@ -25,7 +25,7 @@ it current: update it in the same PR as any phase or significant change.
    ```
 4. Work on a branch from `main`, **one PR per phase or named editor milestone, never stacked**. The user merges. Phase 5 is split into 5A–5E so each deliverable is independently reviewable.
 5. **Every change updates the docs:** README (detailed, emoji section headers), `docs/ROADMAP.md` status, the Wiki page `~/Wiki/src/desktop/ghostframe.md` (mdBook; `mdbook build`, commit + push, private darkstardevx/Wiki), the vault note `~/Vaults/blackbox-notes/Projects/Ghostframe.md` (commit; no remote), and this file. Commit messages are detailed: what, why, how verified, and what wasn't verified.
-6. Before committing, check that `git config user.email` is `332800418+cybercore-tech@users.noreply.github.com`. `gh`'s *active* account is darkstardevx, so always use the `GH_TOKEN=…cybercore-tech` prefix for PRs.
+6. Before committing, check that `git config user.email` is `332800418+cybercoretech@users.noreply.github.com`. `gh`'s *active* account is darkstardevx, so always use the `GH_TOKEN=…cybercoretech` prefix for PRs.
 7. After the user merges a code PR, build and test merged `main`, then install the new build with `install -m755 ghostframe ~/.local/bin/ghostframe`. A running window keeps the old binary; tell the user to restart. A documentation-only update needs no installation.
 
 ## 🧭 Phase 4 · Library: decisions already made (2026-10-14)
