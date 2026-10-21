@@ -15,7 +15,7 @@ This is the build plan agreed on 2026-10-14. Each phase ships as **one pull requ
 | 🔎 Library | PhotoPrism browse, search, paged grid, nested folder tree. *Recently Added* and *Favorites* use PhotoPrism search filters (`order:newest`, `favorite:true`). |
 | 🔐 Connection | Auto-reconnect from an owner-only local credential file; never touches the desktop keyring. |
 | 🎛️ Editor | 90° rotate, drag-crop, light / contrast / saturation. Every preview runs a separate `magick` process, so sliders lag. |
-| 🧬 Metadata | Ghostframe writes its own XMP sidecar (`cybermeta:` namespace, title / caption / tags / recipe). It does **not** use the [cybermeta](https://github.com/cybercore-tech/cybermeta) tool yet. |
+| 🧬 Metadata | Ghostframe writes its own XMP sidecar (`cybermeta:` namespace, title / caption / tags / recipe). It does **not** use the [cybermeta](https://github.com/cybercoretech/cybermeta) tool yet. |
 | 📤 Export | Full-resolution render to `~/Pictures/Ghostframe/Exports/`; originals are never modified. |
 | 🧱 Code | All UI in one `qml/Main.qml` (~420 lines, long one-line components). |
 

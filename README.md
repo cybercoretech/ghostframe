@@ -35,7 +35,7 @@ The current client foundation includes:
 - 📤 **Export presets:** YouTube Shorts 9:16 (fill, or fit over a blurred background), 16:9 thumbnail, square, web. Formats are JPG, PNG, WebP and AVIF, with adjustable quality.
 - ↩️ Undo / redo for every edit, with a labelled history list. A slider drag counts as one step.
 - 📜 **Edit recipes:** every edit is a versioned JSON recipe, rendered identically for preview and export, saved with the export, and **remembered per photo**. Reopen a photo (or move to it with `[` / `]`) and your edit is still there.
-- 🧬 **Cybermeta inside:** metadata goes through the [cybermeta](https://github.com/cybercore-tech/cybermeta) CLI.
+- 🧬 **Cybermeta inside:** metadata goes through the [cybermeta](https://github.com/cybercoretech/cybermeta) CLI.
   - A **METADATA** panel shows camera, lens, exposure, capture time and **location with a map link**.
   - Exports are **private by default**: GPS is stripped, or choose KEEP ALL, ANONYMOUS (no camera identity) or STRIP ALL.
   - Title, caption and tags are **embedded in the exported file** (XMP, plus EXIF ImageDescription).
@@ -117,12 +117,12 @@ This initial design is **self-hosted, not end-to-end encrypted**. PhotoPrism nee
 - ⚡ libvips 8.15 or newer with its C++ binding (`libvips` on Arch; `pkg-config vips-cpp` must work) for the editor. ImageMagick is no longer required.
 - 🔤 Pango (pulled in by libvips) and the JetBrains Mono font (`ttf-jetbrains-mono`) for text layers; other installed fonts work too.
 - 🖼️ For AVIF export, libheif with an AV1 encoder (Arch's `libheif` includes one).
-- 🧬 [cybermeta](https://github.com/cybercore-tech/cybermeta) **0.2 or newer** on `PATH`, `~/.local/bin` or `~/.cargo/bin` (or set `GHOSTFRAME_CYBERMETA`). It powers the metadata panel, export privacy and XMP. Without it, Ghostframe still exports, but drops all camera metadata (so a location can never leak) and writes no XMP.
+- 🧬 [cybermeta](https://github.com/cybercoretech/cybermeta) **0.2 or newer** on `PATH`, `~/.local/bin` or `~/.cargo/bin` (or set `GHOSTFRAME_CYBERMETA`). It powers the metadata panel, export privacy and XMP. Without it, Ghostframe still exports, but drops all camera metadata (so a location can never leak) and writes no XMP.
 
 ## 🚀 Build and run
 
 ```sh
-git clone https://github.com/cybercore-tech/ghostframe.git
+git clone https://github.com/cybercoretech/ghostframe.git
 cd ghostframe
 qmake6 ghostframe.pro
 make -j"$(nproc)"
@@ -267,7 +267,7 @@ systemctl --user enable --now ghostframe-library.service
 
 The `deploy/.env` file holds the generated local database and admin credentials and is excluded from Git. For a different server, follow the [official PhotoPrism installation guide](https://docs.photoprism.app/getting-started/). The app expects the API at `<server-url>/api/v1` and capability URLs for thumbnails.
 
-The local Compose setup indexes `/home/raven/Pictures` read-only and keeps PhotoPrism's database and generated files in the hidden `/home/raven/Pictures/.ghostframe/` directory. Existing folders such as `Screenshots/2026-10-13/` stay in place; Ghostframe does not reorganize or edit your originals. The local service is read-only for now. A custom Ghostframe Android uploader is planned separately at [cybercore-tech/ghostframe-android-app](https://github.com/cybercore-tech/ghostframe-android-app), with its local worktree planned for `/home/raven/APK/GhostFrame`; its upload/import path will be added once the desktop app is settled.
+The local Compose setup indexes `/home/raven/Pictures` read-only and keeps PhotoPrism's database and generated files in the hidden `/home/raven/Pictures/.ghostframe/` directory. Existing folders such as `Screenshots/2026-10-13/` stay in place; Ghostframe does not reorganize or edit your originals. The local service is read-only for now. A custom Ghostframe Android uploader is planned separately at [cybercore-tech/ghostframe-android-app](https://github.com/cybercoretech/ghostframe-android-app), with its local worktree planned for `/home/raven/APK/GhostFrame`; its upload/import path will be added once the desktop app is settled.
 
 The current local layout is:
 
@@ -304,7 +304,7 @@ The full phase-by-phase build plan lives in **[docs/ROADMAP.md](docs/ROADMAP.md)
 | 🧱 | **0 · Foundation** | UI split into components, in-process **libvips** engine with a live preview proxy, JSON edit recipes, undo/redo |
 | 🎛️ | **1 · Darkroom** | Exposure, curves, white balance, HSL, sharpen/denoise, straighten/perspective, histogram, before/after |
 | ✨ | **2 · Cyber FX** | Neon bloom, chromatic aberration, scanlines, glitch, CYBERGRID duotones, LUTs, Shorts/thumbnail export presets |
-| 🧬 | **3 · Cybermeta** | Metadata panel and GPS stripping on export through the [cybermeta](https://github.com/cybercore-tech/cybermeta) CLI |
+| 🧬 | **3 · Cybermeta** | Metadata panel and GPS stripping on export through the [cybermeta](https://github.com/cybercoretech/cybermeta) CLI |
 | 🗂️ | **4 · Library** | Ratings, culling, albums, compare view, batch export, Holodrive phone-inbox import |
 | 🖌️ | **5 · Local edits** | Masks, heal/clone, layers |
 | 🚀 | **6 · Shipping** | Live CYBERGRID theming, AUR package, project site |
