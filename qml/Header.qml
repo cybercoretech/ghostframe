@@ -37,7 +37,7 @@ Rectangle {
             onAccepted: header.searchRequested(text)
         }
         HeaderButton { text: "▦  LIBRARY"; accent: Theme.pink; selected: header.librarySelected; onClicked: header.libraryClicked() }
-        HeaderButton { text: "⌘  SOURCE"; accent: Theme.cyan; onClicked: Qt.openUrlExternally("https://github.com/cybercore-tech/ghostframe") }
+        HeaderButton { text: "⌘  SOURCE"; accent: Theme.cyan; onClicked: Qt.openUrlExternally("https://github.com/cybercoretech/ghostframe") }
         HeaderButton { text: "⚙  SETTINGS"; accent: Theme.lime; selected: header.settingsSelected; onClicked: header.settingsClicked() }
         Button {
             id: closeButton
