@@ -22,9 +22,50 @@
     @media(max-width:800px){.hero-grid,.editor-grid,.install-grid{grid-template-columns:1fr}.hero{padding-top:64px}.hero-grid{gap:35px}.features{grid-template-columns:1fr 1fr}.facts{grid-template-columns:1fr}.fact{border-right:0;border-bottom:1px solid var(--line)}.fact:last-child{border:0}.navlinks{gap:12px}.navlinks a:not(.source){display:none}}
     @media(max-width:520px){.wrap{width:min(100% - 28px,1160px)}.features,.privacy{grid-template-columns:1fr}.signal-card{padding:17px}.signal-flow{gap:5px}.node{padding:8px}.node b{font-size:9px}.node span{font-size:8px}.arrow{font-size:14px}.capabilities{grid-template-columns:1fr 1fr}section{padding:68px 0}}
   </style>
+  <link rel="stylesheet" href="https://cybercoretech.github.io/kit/chooser.css">
+  <style>
+    cybercore-theme-chooser{--ccx-bg:var(--panel);--ccx-fg:var(--ink);--ccx-line:var(--line);--ccx-accent:var(--cyan);--ccx-focus:var(--cyan);--ccx-field:var(--bg);--ccx-muted:var(--muted);--ccx-button-bg:transparent;--ccx-button-border:var(--line);--ccx-radius:8px;--ccx-button-width:auto;--ccx-height:2.25rem;--ccx-glow:.5;}
+  </style>
+  <script>window.SITE = Object.assign(window.SITE || {}, {"siteLabel": "Ghostframe", "themeVars": {"white": "--ink", "hot_pink": "--pink", "acid_green": "--lime"}});</script>
+  <script type="module" src="https://cybercoretech.github.io/kit/chooser.js"></script>
+  <style id="cc-mobile-first">
+/* Mobile floor (phones + tablets): readable text and finger-sized targets.
+   Generated per range from what renders under 11px / 24px; desktop untouched. */
+@media (max-width: 600px) {
+  div.node > b,
+  div.node > span,
+  div.cap > b,
+  p.command-label,
+  button.copy { font-size: 11px !important; }
+}
+@media (min-width: 601px) and (max-width: 860px) {
+  div.node > span,
+  div.cap > b,
+  p.command-label,
+  button.copy { font-size: 11px !important; }
+}
+@media (min-width: 861px) and (max-width: 1024px) {
+  div.node > span,
+  div.cap > b,
+  p.command-label,
+  button.copy { font-size: 11px !important; }
+}
+@media (pointer: coarse) {
+  span > a { display: inline-flex; align-items: center; min-height: 24px; min-width: 24px; }
+}
+/* Layout fixes: phones and tablets only; laptops and desktops untouched. */
+@media (max-width: 1024px) {
+  /* Mobile first: nothing may make the page wider than the screen.
+     Grid/flex columns may shrink below their widest line; code scrolls in place. */
+  pre { max-width: 100%; overflow-x: auto; }
+  img, video { max-width: 100%; height: auto; }
+  /* Long paths and URLs in inline code may break anywhere instead of widening the page. */
+  :not(pre) > code { overflow-wrap: anywhere; }
+}
+  </style>
 </head>
 <body>
-<header><div class="wrap nav"><a class="brand" href="#top"><img src="assets/ghostframe.svg" alt=""><span>GHOSTFRAME</span></a><nav class="navlinks"><a href="#features">Features</a><a href="#privacy">Privacy</a><a href="#start">Get started</a><a class="source" href="https://github.com/cybercoretech/ghostframe">Source ↗</a><a data-cybercore-master-docs href="https://cybercoretech.github.io/cybercore/docs.html" style="color:#22e6ff;border:1px solid #263454;border-radius:999px;padding:7px 12px;text-decoration:none;font:600 .7rem ui-monospace,monospace;letter-spacing:.08em;white-space:nowrap">MASTER DOCS ↗</a></nav></div></header>
+<header><div class="wrap nav"><a class="brand" href="#top"><img src="assets/ghostframe.svg" alt=""><span>GHOSTFRAME</span></a><nav class="navlinks"><a href="#features">Features</a><a href="#privacy">Privacy</a><a href="#start">Get started</a><a class="source" href="https://github.com/cybercoretech/ghostframe">Source ↗</a><a data-cybercore-master-docs href="https://cybercoretech.github.io/cybercore/docs.html" style="color:#22e6ff;border:1px solid #263454;border-radius:999px;padding:7px 12px;text-decoration:none;font:600 .7rem ui-monospace,monospace;letter-spacing:.08em;white-space:nowrap">MASTER DOCS ↗</a><cybercore-theme-chooser compact match=".navlinks a:not(.source):not([data-cybercore-master-docs])"></cybercore-theme-chooser></nav></div></header>
 <main id="top">
   <section class="hero"><div class="wrap hero-grid"><div><p class="eyebrow">Local photo system / Linux desktop</p><h1>Your photo archive,<br><em>at home.</em></h1><p class="lead">Ghostframe is a keyboard-first desktop browser and darkroom editor for your own PhotoPrism library. Browse, search, edit, and export while your originals stay where they are.</p><div class="actions"><a class="button" href="#start">Build Ghostframe <span>↘</span></a><a class="button secondary" href="https://github.com/cybercoretech/ghostframe">Explore source ↗</a></div><p class="hero-note">Desktop MVP · Qt Quick · Linux / Omarchy · MIT</p></div>
     <aside class="signal-card" aria-label="How Ghostframe connects to your photo library"><div class="signal-head"><span>YOUR ARCHIVE / LOCAL SESSION</span><span class="live">● PRIVATE BY DESIGN</span></div><h2 class="signal-title">A focused surface for your own library.</h2><p class="signal-copy">PhotoPrism keeps indexing and catalog duties. Ghostframe gives you a native browsing and editing workspace.</p><div class="signal-flow"><div class="node"><b>GHOSTFRAME</b><span>browse · edit · export</span></div><span class="arrow">→</span><div class="node"><b>PHOTOPRISM</b><span>catalog · index · AI</span></div><span class="arrow">→</span><div class="node"><b>YOUR FILES</b><span>originals stay put</span></div></div><div class="safety"><strong>Source-safe workflow.</strong> Ghostframe reads from your library and exports edited copies. It does not overwrite original images.</div></aside></div></section>
